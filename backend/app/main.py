@@ -35,22 +35,8 @@ async def lifespan(app: FastAPI):
     os.makedirs(cfg.upload_temp_dir, exist_ok=True)
     logger.info("Upload temp dir: %s", cfg.upload_temp_dir)
 
-    # Pre-warm embedding model (so first request isn't slow)
-    try:
-        from app.utils.embedder import get_embedding_model
-        get_embedding_model()
-        logger.info("Embedding model pre-loaded successfully")
-    except Exception as exc:
-        logger.warning("Failed to pre-load embedding model: %s", exc)
-
-    # Verify ChromaDB connection
-    try:
-        from app.utils.chroma_client import get_chroma_client
-        client = get_chroma_client()
-        client.heartbeat()
-        logger.info("ChromaDB connection verified")
-    except Exception as exc:
-        logger.warning("ChromaDB not reachable yet: %s (will retry on first request)", exc)
+    # NOTE: Embedding model and ChromaDB load lazily on first request.
+    logger.info("API startup complete — ready to accept requests.")
 
     yield
 

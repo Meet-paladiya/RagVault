@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mail, Lock, User, Brain, Sparkles } from 'lucide-react'
+import { Mail, Lock, User, Brain } from 'lucide-react'
 import { useRegisterMutation } from '@/api/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

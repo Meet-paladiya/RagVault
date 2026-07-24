@@ -73,7 +73,7 @@ async def _save_messages(
     await db.commit()
 
 
-@router.post("/{chat_id}/messages")
+@router.post("/{chat_id}/messages", response_model=None)
 async def send_message(
     chat_id: str,
     payload: MessageCreate,
