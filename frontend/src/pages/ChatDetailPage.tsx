@@ -57,9 +57,9 @@ export function ChatDetailPage() {
         content,
         (token) => setStreamingContent((prev) => (prev ?? '') + token),
         async () => {
+          await queryClient.invalidateQueries({ queryKey: ['messages', chatId] })
           setStreamingContent(null)
           setIsStreaming(false)
-          await queryClient.invalidateQueries({ queryKey: ['messages', chatId] })
         },
         () => {
           setStreamingContent(null)

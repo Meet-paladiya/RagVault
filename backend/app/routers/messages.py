@@ -47,30 +47,35 @@ async def _load_chat_history(chat_id: str, db: AsyncSession, limit: int = 12) ->
 
 
 async def _save_messages(
-    db: AsyncSession,
     chat_id: str,
     user_content: str,
     assistant_content: str,
     citations: list[dict],
 ) -> None:
-    """Persist user question and assistant answer to PostgreSQL."""
-    user_msg = Message(
-        id=uuid4(),
-        chat_id=chat_id,
-        role="user",
-        content=user_content,
-        citations=None,
-    )
-    assistant_msg = Message(
-        id=uuid4(),
-        chat_id=chat_id,
-        role="assistant",
-        content=assistant_content,
-        citations=citations,
-    )
-    db.add(user_msg)
-    db.add(assistant_msg)
-    await db.commit()
+    """Persist user question and assistant answer to PostgreSQL using a fresh DB session."""
+    from app.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        try:
+            user_msg = Message(
+                id=uuid4(),
+                chat_id=chat_id,
+                role="user",
+                content=user_content,
+                citations=None,
+            )
+            assistant_msg = Message(
+                id=uuid4(),
+                chat_id=chat_id,
+                role="assistant",
+                content=assistant_content,
+                citations=citations,
+            )
+            session.add(user_msg)
+            session.add(assistant_msg)
+            await session.commit()
+        except Exception as exc:
+            logger.error("[MESSAGES] Failed to save messages to DB: %s", exc)
 
 
 @router.post("/{chat_id}/messages", response_model=None)
@@ -108,17 +113,15 @@ async def send_message(
                     except json.JSONDecodeError:
                         citations = []
                 elif chunk == "data: [DONE]\n\n":
-                    pass  # handled below
+                    # Guarantee DB commit completes BEFORE sending [DONE] signal to frontend
+                    full_answer = "".join(full_answer_parts)
+                    if full_answer:
+                        await _save_messages(chat_id, payload.content, full_answer, citations)
+                    yield "data: [DONE]\n\n"
                 else:
                     token = chunk.removeprefix("data: ").rstrip("\n")
                     full_answer_parts.append(token)
-                yield chunk
-
-            # Persist messages after stream completes
-            full_answer = "".join(full_answer_parts)
-            if full_answer:
-                # Use a fresh session (outside request scope is fine here since we yield)
-                await _save_messages(db, chat_id, payload.content, full_answer, citations)
+                    yield chunk
 
         return StreamingResponse(
             event_generator(),
@@ -132,7 +135,7 @@ async def send_message(
         # ── Non-streaming path ────────────────────────────────────────────────
         result = await run_rag(payload.content, chat_id, chat_history)
         await _save_messages(
-            db, chat_id, payload.content, result["answer"], result["citations"]
+            chat_id, payload.content, result["answer"], result["citations"]
         )
         # Return the assistant message
         db_result = await db.execute(

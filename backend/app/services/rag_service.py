@@ -103,9 +103,15 @@ def generate_answer_node(state: RAGState) -> RAGState:
     llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model)
 
     prompt = _build_prompt(state)
-    logger.info("[RAG] Calling Ollama model: %s", cfg.ollama_model)
-    answer = llm.invoke(prompt)
-    state["answer"] = answer.strip()
+    try:
+        answer = llm.invoke(prompt)
+        state["answer"] = answer.strip()
+    except Exception as exc:
+        logger.error("[RAG] LLM generation error: %s", exc)
+        state["answer"] = (
+            f"⚠️ **LLM Error**: Could not generate response using Ollama model `{cfg.ollama_model}`.\n"
+            f"Please run `ollama pull {cfg.ollama_model}` in your terminal."
+        )
     return state
 
 
@@ -248,9 +254,17 @@ Cite sources as [Source: <filename>, Page: <N>].
     llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model)
     logger.info("[RAG:stream] Streaming from Ollama model: %s", cfg.ollama_model)
 
-    async for chunk in llm.astream(prompt):
-        if chunk:
-            yield f"data: {chunk}\n\n"
+    try:
+        async for chunk in llm.astream(prompt):
+            if chunk:
+                yield f"data: {chunk}\n\n"
+    except Exception as exc:
+        logger.error("[RAG:stream] LLM streaming error: %s", exc)
+        err_msg = (
+            f"\n\n⚠️ **LLM Model Not Found**: Ollama model `{cfg.ollama_model}` is not pulled yet.\n"
+            f"Please run `ollama pull {cfg.ollama_model}` in your terminal."
+        )
+        yield f"data: {err_msg}\n\n"
 
     # ── Step 5: Emit deduplicated citations as metadata event ─────────────────
     seen: set[tuple[str, int]] = set()
