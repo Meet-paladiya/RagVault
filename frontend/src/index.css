@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+
+    --card: 224 71% 7%;
+    --card-foreground: 213 31% 91%;
+
+    --popover: 224 71% 7%;
+    --popover-foreground: 215 20.2% 65.1%;
+
+    --primary: 263 90% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 263 90% 65%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* ── Glassmorphism utilities ──────────────────────────────────────────────── */
+@layer utilities {
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-white/10 shadow-2xl;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-purple-400 to-indigo-500;
+  }
+}
+
+/* ── Custom Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.5); }
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(263 90% 65% / 0); }
+  50%       { box-shadow: 0 0 16px 4px hsl(263 90% 65% / 0.35); }
+}
+
+.animate-fade-in  { animation: fadeIn 0.3s ease forwards; }
+.animate-slide-in { animation: slideInLeft 0.3s ease forwards; }
+.animate-glow     { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* ── Gradient button ──────────────────────────────────────────────────────── */
+.btn-gradient {
+  background: linear-gradient(135deg, hsl(263 90% 65%), hsl(234 89% 63%));
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+.btn-gradient:hover:not(:disabled) {
+  background: linear-gradient(135deg, hsl(263 90% 60%), hsl(234 89% 58%));
+}
+.btn-gradient:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Markdown prose styles ────────────────────────────────────────────────── */
+.prose-invert h1, .prose-invert h2, .prose-invert h3 {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.prose-invert p { margin-bottom: 0.75rem; }
+.prose-invert ul, .prose-invert ol { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+.prose-invert li { margin-bottom: 0.25rem; }
+.prose-invert code {
+  background: hsl(var(--accent));
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+}
+
+/* ── Smooth color transitions ─────────────────────────────────────────────── */
+* {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}

@@ -1,0 +1,153 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Offline AI Knowledge Hub — Docker Compose
+#  Services: postgres | chromadb | ollama | backend | frontend
+#  One-time setup: docker compose up -d
+#  No internet required after initial model pulls.
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  hub_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  chroma_data:
+  ollama_models:
+  hf_cache:
+  uploads_temp:
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: hub_postgres
+    restart: unless-stopped
+    networks:
+      - hub_net
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-knowledge_user} -d ${POSTGRES_DB:-knowledge_hub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"  # Expose for local dev; remove in production
+
+  # ── ChromaDB ───────────────────────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: hub_chromadb
+    restart: unless-stopped
+    networks:
+      - hub_net
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma_data
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data:/chroma_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "8001:8000"  # Expose for local dev inspection
+
+  # ── Ollama (Local LLM Runtime) ─────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: hub_ollama
+    restart: unless-stopped
+    networks:
+      - hub_net
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    ports:
+      - "11434:11434"
+    # ── GPU support (NVIDIA) — uncomment if GPU available ──
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ── Backend (FastAPI) ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hub_backend
+    restart: unless-stopped
+    networks:
+      - hub_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://knowledge_user:changeme_strong_password@postgres:5432/knowledge_hub}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - HF_HOME=/hf_cache
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+    volumes:
+      - uploads_temp:/uploads/temp
+      - hf_cache:/hf_cache
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Frontend (React + Vite, served via Nginx) ──────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hub_frontend
+    restart: unless-stopped
+    networks:
+      - hub_net
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+  # ── Nginx Reverse Proxy (optional profile) ─────────────────────────────────
+  # Start with: docker compose --profile nginx up -d
+  nginx:
+    image: nginx:alpine
+    container_name: hub_nginx
+    profiles:
+      - nginx
+    restart: unless-stopped
+    networks:
+      - hub_net
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
