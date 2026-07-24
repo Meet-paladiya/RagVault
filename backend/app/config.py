@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # ── ChromaDB ─────────────────────────────────────────────────────────────
     chroma_host: str = "chromadb"
     chroma_port: int = 8000
+    chroma_persist_dir: str = str(Path(__file__).resolve().parents[1] / "chroma_data")
 
     # ── File Storage ──────────────────────────────────────────────────────────
     upload_temp_dir: str = str(Path(__file__).resolve().parents[1] / "uploads" / "temp")

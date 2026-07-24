@@ -14,17 +14,35 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
-def get_chroma_client() -> chromadb.HttpClient:
-    """Return a singleton ChromaDB HTTP client."""
+def get_chroma_client() -> chromadb.ClientAPI:
+    """
+    Return a ChromaDB client.
+    Tries HTTP server first if running in Docker with standalone Chroma container.
+    Falls back to embedded PersistentClient if HTTP server is not reachable.
+    """
     from app.config import get_settings
 
     cfg = get_settings()
-    logger.info("Connecting to ChromaDB at %s:%s", cfg.chroma_host, cfg.chroma_port)
-    return chromadb.HttpClient(
-        host=cfg.chroma_host,
-        port=cfg.chroma_port,
-        settings=Settings(anonymized_telemetry=False),
-    )
+    try:
+        logger.info("Connecting to ChromaDB HTTP server at %s:%s", cfg.chroma_host, cfg.chroma_port)
+        client = chromadb.HttpClient(
+            host=cfg.chroma_host,
+            port=cfg.chroma_port,
+            settings=Settings(anonymized_telemetry=False),
+        )
+        client.heartbeat()
+        logger.info("Successfully connected to ChromaDB HTTP server.")
+        return client
+    except Exception as exc:
+        logger.warning(
+            "Could not connect to ChromaDB HTTP server (%s). Using embedded PersistentClient at %s",
+            exc,
+            cfg.chroma_persist_dir,
+        )
+        return chromadb.PersistentClient(
+            path=cfg.chroma_persist_dir,
+            settings=Settings(anonymized_telemetry=False),
+        )
 
 
 def _collection_name(chat_id: str) -> str:
