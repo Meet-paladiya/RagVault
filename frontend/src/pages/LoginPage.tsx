@@ -37,7 +37,7 @@ export function LoginPage() {
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center mx-auto mb-6 animate-glow">
             <Brain className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-4xl font-bold gradient-text mb-3">Knowledge Hub</h1>
+          <h1 className="text-4xl font-bold gradient-text mb-3">RagVault</h1>
           <p className="text-muted-foreground text-lg max-w-xs">
             Your offline AI-powered study companion. Chat with your documents. Learn smarter.
           </p>

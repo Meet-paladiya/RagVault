@@ -36,16 +36,16 @@ interface DocumentListProps {
 }
 
 export function DocumentList({ chatId }: DocumentListProps) {
-  const { data, isLoading } = useDocuments(chatId, {
-    refetchInterval: (data) =>
-      data?.documents?.some((d) => d.status === 'processing') ? 3000 : false,
+  const { data, isLoading, isError } = useDocuments(chatId, {
+    refetchInterval: (data: any) =>
+      data?.documents?.some((d: any) => d.status === 'processing') ? 3000 : false,
   })
   const deleteDoc = useDeleteDocument(chatId)
   const { toast } = useToast()
 
   const docs = data?.documents ?? []
 
-  if (isLoading) return <div className="py-4 text-xs text-muted-foreground text-center">Loading…</div>
+  if (isLoading && !isError) return <div className="py-4 text-xs text-muted-foreground text-center">Loading…</div>
 
   if (docs.length === 0) return (
     <div className="py-6 text-center">
@@ -65,7 +65,7 @@ export function DocumentList({ chatId }: DocumentListProps) {
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 w-full">
       <AnimatePresence>
         {docs.map((doc) => (
           <motion.div
@@ -73,22 +73,22 @@ export function DocumentList({ chatId }: DocumentListProps) {
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -8 }}
-            className="group flex items-start gap-2.5 p-2.5 rounded-lg glass hover:bg-white/8 transition-colors"
+            className="group flex items-start gap-2 p-2 rounded-lg glass hover:bg-white/8 transition-colors max-w-full overflow-hidden"
           >
-            <div className="mt-0.5">{fileIcon(doc.file_type)}</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate text-foreground">{doc.filename}</p>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <div className="mt-0.5 flex-shrink-0">{fileIcon(doc.file_type)}</div>
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <p className="text-xs font-medium truncate text-foreground block max-w-full" title={doc.filename}>{doc.filename}</p>
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                 <StatusBadge status={doc.status} />
                 {doc.total_chunks != null && (
-                  <span className="text-[10px] text-muted-foreground">{doc.total_chunks} chunks</span>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">{doc.total_chunks} chunks</span>
                 )}
               </div>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="w-6 h-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+              className="w-6 h-6 flex-shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
               onClick={() => handleDelete(doc.id, doc.filename)}
             >
               <Trash2 className="w-3.5 h-3.5" />

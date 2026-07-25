@@ -4,8 +4,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { BookOpen, ChevronDown, ChevronUp, User, Brain } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import { BookOpen, ChevronDown, ChevronUp, User, Brain, Copy, Check } from 'lucide-react'
+import { format, isToday, isYesterday } from 'date-fns'
 import type { Message, Citation } from '@/types'
 import { Badge } from '@/components/ui/badge'
 
@@ -13,10 +13,36 @@ interface MessageBubbleProps {
   message: Message
 }
 
+function formatMessageTime(dateStr: string): string {
+  if (!dateStr) return ''
+  const str = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z'
+  const date = new Date(str)
+  if (isNaN(date.getTime())) return ''
+  
+  if (isToday(date)) {
+    return format(date, 'h:mm a')
+  }
+  if (isYesterday(date)) {
+    return `Yesterday, ${format(date, 'h:mm a')}`
+  }
+  return format(date, 'MMM d, h:mm a')
+}
+
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const [citationsOpen, setCitationsOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
   const citations: Citation[] = message.citations ?? []
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <motion.div
@@ -36,7 +62,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
       <div className={`flex flex-col max-w-[78%] ${isUser ? 'items-end' : 'items-start'}`}>
         {/* Bubble */}
-        <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+        <div className={`group relative rounded-2xl px-4 py-3 text-sm leading-relaxed ${
           isUser
             ? 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-tr-sm'
             : 'glass-card text-foreground rounded-tl-sm'
@@ -105,10 +131,24 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Timestamp */}
-        <span className="text-[10px] text-muted-foreground mt-1 px-1">
-          {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
-        </span>
+        {/* Timestamp and Copy button */}
+        <div className={`flex items-center gap-2 mt-1 px-1 text-[10px] text-muted-foreground ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+          <span>{formatMessageTime(message.created_at)}</span>
+          <button
+            onClick={handleCopy}
+            title="Copy message"
+            className="hover:text-purple-300 transition-colors p-0.5 rounded opacity-70 hover:opacity-100 flex items-center gap-0.5"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3 h-3 text-green-400" />
+                <span className="text-[9px] text-green-400 font-medium">Copied</span>
+              </>
+            ) : (
+              <Copy className="w-3 h-3" />
+            )}
+          </button>
+        </div>
       </div>
     </motion.div>
   )

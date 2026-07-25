@@ -33,7 +33,7 @@ export interface Message {
   chat_id: string;
   role: 'user' | 'assistant';
   content: string;
-  citations?: Citation[];
+  citations?: Citation[] | null;
   created_at: string;
 }
 

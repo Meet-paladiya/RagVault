@@ -1,6 +1,7 @@
 """
 Auth service: registration, login, and JWT token management.
 """
+import asyncio
 import logging
 from uuid import uuid4
 
@@ -33,11 +34,12 @@ async def register_user(db: AsyncSession, name: str, email: str, password: str) 
             detail="An account with this email already exists.",
         )
 
+    pwd_hash = await asyncio.to_thread(hash_password, password)
     user = User(
         id=uuid4(),
         name=name,
         email=email,
-        password_hash=hash_password(password),
+        password_hash=pwd_hash,
     )
     db.add(user)
     await db.commit()
@@ -54,7 +56,15 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(password, user.password_hash):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    is_valid = await asyncio.to_thread(verify_password, password, user.password_hash)
+    if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",

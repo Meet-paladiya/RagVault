@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
-  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft,
-  BookOpen, History, Zap,
+  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History
 } from 'lucide-react'
 import { useChats, useCreateChat, useDeleteChat } from '@/api/chats'
 import { useAuthStore } from '@/store/authStore'
@@ -70,7 +69,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             animate={{ opacity: 1 }}
             className="font-semibold text-sm gradient-text whitespace-nowrap"
           >
-            Knowledge Hub
+            RagVault
           </motion.span>
         )}
         <button
@@ -129,11 +128,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <Link key={chat.id} to={`/chats/${chat.id}`}>
               <motion.div
                 whileHover={{ x: 2 }}
-                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer group transition-all duration-150 ${
-                  chatId === chat.id
-                    ? 'bg-primary/15 border-l-2 border-primary text-foreground'
-                    : 'hover:bg-white/5 text-muted-foreground hover:text-foreground'
-                }`}
+                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer group transition-all duration-150 ${chatId === chat.id
+                  ? 'bg-primary/15 border-l-2 border-primary text-foreground'
+                  : 'hover:bg-white/5 text-muted-foreground hover:text-foreground'
+                  }`}
               >
                 <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
                 {!collapsed && (

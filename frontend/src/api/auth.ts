@@ -7,15 +7,13 @@ export const useRegisterMutation = () => {
   return useMutation({
     mutationFn: async (data: { name: string; email: string; password: string }) => {
       const res = await api.post('/auth/register', data)
-      return res.data
-    },
-    onSuccess: (data) => {
-      // data has: { user: {...}, access_token, refresh_token, token_type }
-      setAuth(data.user, {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        token_type: data.token_type,
+      const dataObj = res.data
+      setAuth(dataObj.user, {
+        access_token: dataObj.access_token,
+        refresh_token: dataObj.refresh_token,
+        token_type: dataObj.token_type,
       })
+      return dataObj
     },
   })
 }
@@ -24,19 +22,18 @@ export const useLoginMutation = () => {
   const setAuth = useAuthStore((s) => s.setAuth)
   return useMutation({
     mutationFn: async (data: { email: string; password: string }) => {
-      const res = await api.post('/auth/login', data)
-      return res.data
-    },
-    onSuccess: (data) => {
-      // data has: { access_token, refresh_token, token_type }
-      // Fetch user info after login
-      api.get('/auth/me').then((res) => {
-        setAuth(res.data, {
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
-          token_type: data.token_type,
-        })
+      const loginRes = await api.post('/auth/login', data)
+      const tokens = loginRes.data
+      
+      const meRes = await api.get('/auth/me', {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
       })
+      
+      const user = meRes.data
+      setAuth(user, tokens)
+      return { user, tokens }
     },
   })
 }

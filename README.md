@@ -20,7 +20,7 @@ A fully offline, self-hosted Retrieval-Augmented Generation (RAG) learning platf
 ### 1. Clone & Configure
 
 ```bash
-git clone <repo-url> ai-knowledge-hub
+git clone https://github.com/Meet-paladiya/RagVault.git
 cd ai-knowledge-hub
 cp .env.example .env
 ```

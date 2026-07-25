@@ -173,3 +173,32 @@ def delete_document_chunks(chat_id: str, document_id: str) -> None:
         )
     except Exception as exc:
         logger.warning("Failed to delete chunks for document %s: %s", document_id, exc)
+
+
+def get_all_chunks(chat_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Retrieve chunks from the chat's collection without query embeddings."""
+    collection = get_or_create_collection(chat_id)
+    try:
+        results = collection.get(
+            limit=limit,
+            include=["documents", "metadatas"],
+        )
+    except Exception as exc:
+        logger.warning("ChromaDB get failed: %s", exc)
+        return []
+
+    hits: list[dict[str, Any]] = []
+    docs = results.get("documents") or []
+    metas = results.get("metadatas") or []
+
+    for doc_text, meta in zip(docs, metas):
+        hits.append(
+            {
+                "text": doc_text,
+                "source": meta.get("source", "unknown"),
+                "page": meta.get("page", 0),
+                "chunk_index": meta.get("chunk_index", 0),
+                "document_id": meta.get("document_id", ""),
+            }
+        )
+    return hits

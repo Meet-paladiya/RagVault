@@ -42,7 +42,7 @@ export function ChatsPage() {
         <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-purple-500/20 to-indigo-600/20 border border-purple-500/30 flex items-center justify-center mx-auto mb-6 animate-glow">
           <Brain className="w-10 h-10 text-purple-400" />
         </div>
-        <h1 className="text-3xl font-bold gradient-text mb-3">Welcome to Knowledge Hub</h1>
+        <h1 className="text-3xl font-bold gradient-text mb-3">Welcome to RagVault</h1>
         <p className="text-muted-foreground mb-8 text-sm leading-relaxed">
           Create your first knowledge space. Upload your study materials — PDFs, slides, lectures — and
           start chatting with your documents powered by local AI.

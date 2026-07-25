@@ -30,7 +30,7 @@ export function DropZone({ chatId }: DropZoneProps) {
   const { toast } = useToast()
 
   const onDrop = useCallback(
-    async (acceptedFiles: File[], rejectedFiles: { file: File; errors: { message: string }[] }[]) => {
+    async (acceptedFiles: File[], rejectedFiles: any[]) => {
       if (rejectedFiles.length > 0) {
         const names = rejectedFiles.map((r) => r.file.name).join(', ')
         toast({
@@ -61,29 +61,29 @@ export function DropZone({ chatId }: DropZoneProps) {
     <motion.div
       {...(getRootProps() as any)}
       whileHover={{ scale: 1.01 }}
-      className={`border-2 border-dashed rounded-xl p-4 cursor-pointer transition-colors duration-200 ${
+      className={`border-2 border-dashed rounded-xl p-3 cursor-pointer transition-colors duration-200 ${
         isDragActive
           ? 'border-purple-500 bg-purple-500/10 animate-glow'
           : 'border-white/15 hover:border-purple-500/50 hover:bg-white/3'
       }`}
     >
       <input {...getInputProps()} />
-      <div className="flex flex-col items-center gap-2 text-center">
+      <div className="flex flex-col items-center gap-1 text-center">
         <motion.div
           animate={isDragActive ? { scale: [1, 1.15, 1], rotate: [0, -5, 5, 0] } : {}}
           transition={{ repeat: isDragActive ? Infinity : 0, duration: 0.6 }}
         >
-          <UploadCloud className={`w-8 h-8 ${isDragActive ? 'text-purple-400' : 'text-muted-foreground'}`} />
+          <UploadCloud className={`w-6 h-6 ${isDragActive ? 'text-purple-400' : 'text-muted-foreground'}`} />
         </motion.div>
         <p className="text-xs font-medium text-foreground">
           {isDragActive ? 'Drop to upload' : 'Drag & drop files'}
         </p>
         <p className="text-[10px] text-muted-foreground">or click to browse</p>
-        <div className="flex items-center gap-3 mt-1">
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap justify-center">
           {FILE_LABELS.map(({ icon: Icon, label, color }) => (
-            <div key={label} className="flex items-center gap-1">
-              <Icon className={`w-3 h-3 ${color}`} />
-              <span className="text-[10px] text-muted-foreground">{label}</span>
+            <div key={label} className="flex items-center gap-0.5">
+              <Icon className={`w-2.5 h-2.5 ${color}`} />
+              <span className="text-[9px] text-muted-foreground">{label}</span>
             </div>
           ))}
         </div>

@@ -31,7 +31,7 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
@@ -50,7 +50,7 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled || isStreaming}
-          placeholder="Ask a question about your documents… (Ctrl+Enter to send)"
+          placeholder="Ask a question about your documents… (Enter to send, Shift+Enter for new line)"
           rows={1}
           className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none py-2 px-2 max-h-40 leading-relaxed"
         />
@@ -66,7 +66,7 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
         </Button>
       </div>
       <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-        Ctrl+Enter to send · Answers grounded in your uploaded documents
+        Enter to send · Shift+Enter for new line · Answers grounded in your documents
       </p>
     </motion.div>
   )

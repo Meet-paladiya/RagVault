@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.database import create_tables
 from app.routers.auth import router as auth_router
 from app.routers.chats import router as chats_router
 from app.routers.documents import router as documents_router
@@ -29,7 +30,11 @@ async def lifespan(app: FastAPI):
     cfg = get_settings()
 
     # ── Startup ───────────────────────────────────────────────────────────────
-    logger.info("Starting AI Knowledge Hub API (env=%s)", cfg.environment)
+    logger.info("Starting RagVault API (env=%s)", cfg.environment)
+
+    # Create database tables
+    await create_tables()
+    logger.info("Database tables initialized successfully.")
 
     # Create temp upload directory
     os.makedirs(cfg.upload_temp_dir, exist_ok=True)
@@ -41,13 +46,13 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
-    logger.info("Shutting down AI Knowledge Hub API")
+    logger.info("Shutting down RagVault API")
 
 
 # ─── App Instance ─────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="AI Knowledge Hub API",
+    title="RagVault API",
     description=(
         "Offline RAG-based learning system. "
         "Upload PPTX, PDF, video, and audio files, then chat with your documents."

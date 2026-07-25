@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { CheckCircle2, XCircle, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -65,11 +65,10 @@ export function QuizCard({ quiz, onSubmit, isSubmitting }: QuizCardProps) {
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
               onClick={() => handleSelect(opt.id)}
-              className={`w-full text-left px-3.5 py-3 rounded-lg text-xs font-medium transition-all border ${
-                selected
+              className={`w-full text-left px-3.5 py-3 rounded-lg text-xs font-medium transition-all border ${selected
                   ? 'bg-purple-600/20 border-purple-500/60 text-purple-200'
                   : 'glass border-white/10 hover:border-purple-500/30 hover:bg-white/5'
-              }`}
+                }`}
             >
               <span className="mr-2 font-bold text-muted-foreground">{opt.id.toUpperCase()}.</span>
               {opt.text}
@@ -98,7 +97,7 @@ interface QuizResultsProps {
   onRetry: () => void
 }
 
-export function QuizResults({ result, onRecommendations, onRetry }: QuizResultsProps) {
+export function QuizResults({ result, onRetry }: QuizResultsProps) {
   const pct = Math.round(result.score)
   const circumference = 2 * Math.PI * 40
 
@@ -147,11 +146,7 @@ export function QuizResults({ result, onRecommendations, onRetry }: QuizResultsP
 
       {/* Actions */}
       <div className="flex flex-col gap-2">
-        {result.weak_topics.length > 0 && (
-          <Button onClick={onRecommendations} size="sm" className="w-full btn-gradient text-white border-0">
-            Get Study Plan
-          </Button>
-        )}
+
         <Button onClick={onRetry} variant="outline" size="sm" className="w-full border-white/15">
           Try Again
         </Button>
