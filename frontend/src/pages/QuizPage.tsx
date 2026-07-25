@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { History, Zap, Target } from 'lucide-react'
+import { History, Zap } from 'lucide-react'
 import { useChats } from '@/api/chats'
 import { useQuizHistory } from '@/api/quiz'
 import { Badge } from '@/components/ui/badge'

@@ -29,6 +29,31 @@ export function ChatDetailPage() {
       navigate('/chats', { replace: true })
     }
   }, [isChatError, navigate])
+
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    // Abort active stream from previous chat on chatId change
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+
+    setStreamingContent(null)
+    setOptimisticUserMessage(null)
+    setIsStreaming(false)
+    setActiveQuiz(null)
+    setQuizResult(null)
+    setSelectedQuizType(null)
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+    }
+  }, [chatId])
+
   const { data: messagesData } = useMessages(chatId!)
   const clearKnowledge = useClearKnowledge()
   const generateQuiz = useGenerateQuiz(chatId!)
@@ -54,6 +79,14 @@ export function ChatDetailPage() {
 
   const handleSend = async (content: string) => {
     if (!chatId) return
+
+    // Cancel any existing in-flight stream
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setIsStreaming(true)
     setOptimisticUserMessage(content)
     setStreamingContent('')
@@ -62,24 +95,35 @@ export function ChatDetailPage() {
       await streamMessage(
         chatId,
         content,
-        (token) => setStreamingContent((prev) => (prev ?? '') + token),
+        (token) => {
+          if (!controller.signal.aborted) {
+            setStreamingContent((prev) => (prev ?? '') + token)
+          }
+        },
         async () => {
-          await queryClient.invalidateQueries({ queryKey: ['messages', chatId] })
-          setOptimisticUserMessage(null)
-          setStreamingContent(null)
-          setIsStreaming(false)
+          if (!controller.signal.aborted) {
+            await queryClient.invalidateQueries({ queryKey: ['messages', chatId] })
+            setOptimisticUserMessage(null)
+            setStreamingContent(null)
+            setIsStreaming(false)
+          }
         },
         () => {
-          setOptimisticUserMessage(null)
-          setStreamingContent(null)
-          setIsStreaming(false)
-          toast({ title: 'Error', description: 'Failed to get answer.', variant: 'destructive' })
-        }
+          if (!controller.signal.aborted) {
+            setOptimisticUserMessage(null)
+            setStreamingContent(null)
+            setIsStreaming(false)
+            toast({ title: 'Error', description: 'Failed to get answer.', variant: 'destructive' })
+          }
+        },
+        controller.signal,
       )
     } catch {
-      setOptimisticUserMessage(null)
-      setStreamingContent(null)
-      setIsStreaming(false)
+      if (!controller.signal.aborted) {
+        setOptimisticUserMessage(null)
+        setStreamingContent(null)
+        setIsStreaming(false)
+      }
     }
   }
 

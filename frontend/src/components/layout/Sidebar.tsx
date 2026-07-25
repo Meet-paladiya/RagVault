@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import {
   Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History
 } from 'lucide-react'
-import { useChats, useCreateChat, useDeleteChat } from '@/api/chats'
+import { useChats, useCreateChat } from '@/api/chats'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { user, clearAuth } = useAuthStore()
   const { data: chatsData } = useChats()
   const createChat = useCreateChat()
-  const deleteChat = useDeleteChat()
   const { toast } = useToast()
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)

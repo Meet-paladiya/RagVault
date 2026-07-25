@@ -1,7 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import api from './client'
 import { useAuthStore } from '@/store/authStore'
-import type { Message, MessageListResponse } from '@/types'
+import type { MessageListResponse } from '@/types'
 
 export const useMessages = (chatId?: string) => {
   return useQuery({
@@ -29,6 +29,7 @@ export const streamMessage = async (
   onToken: (text: string) => void,
   onDone: () => void,
   onError: (err: unknown) => void,
+  signal?: AbortSignal,
 ) => {
   try {
     const tokens = useAuthStore.getState().tokens
@@ -39,6 +40,7 @@ export const streamMessage = async (
         Authorization: `Bearer ${tokens?.access_token ?? ''}`,
       },
       body: JSON.stringify({ content, stream: true }),
+      signal,
     })
 
     if (!response.ok) {
@@ -52,6 +54,11 @@ export const streamMessage = async (
     let buffer = ''
 
     while (true) {
+      if (signal?.aborted) {
+        await reader.cancel()
+        return
+      }
+
       const { value, done } = await reader.read()
       if (done) break
 
@@ -62,6 +69,11 @@ export const streamMessage = async (
       buffer = lines.pop() ?? ''   // keep incomplete last line in buffer
 
       for (const line of lines) {
+        if (signal?.aborted) {
+          await reader.cancel()
+          return
+        }
+
         if (!line.startsWith('data: ')) continue
         const data = line.slice(6)
 
@@ -81,8 +93,13 @@ export const streamMessage = async (
       }
     }
 
-    onDone()
+    if (!signal?.aborted) {
+      onDone()
+    }
   } catch (error) {
+    if ((error as { name?: string })?.name === 'AbortError') {
+      return
+    }
     onError(error)
   }
 }

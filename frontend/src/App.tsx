@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/pages/LoginPage'
@@ -7,6 +7,11 @@ import { ChatsPage } from '@/pages/ChatsPage'
 import { ChatDetailPage } from '@/pages/ChatDetailPage'
 import { QuizPage } from '@/pages/QuizPage'
 import { Toaster } from '@/components/ui/toaster'
+
+function KeyedChatDetailPage() {
+  const { chatId } = useParams<{ chatId: string }>()
+  return <ChatDetailPage key={chatId} />
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const tokens = useAuthStore((s) => s.tokens)
@@ -48,7 +53,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AppShell>
-                <ChatDetailPage />
+                <KeyedChatDetailPage />
               </AppShell>
             </ProtectedRoute>
           }
