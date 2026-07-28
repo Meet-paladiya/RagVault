@@ -94,3 +94,5 @@ export interface RecommendationResponse {
   recommendations: string;
   generated_at: string;
 }
+
+export * from './notes'

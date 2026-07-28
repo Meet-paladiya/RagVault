@@ -17,4 +17,5 @@ class Chat(Base):
     messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="chat", cascade="all, delete-orphan")
     quizzes = relationship("Quiz", back_populates="chat", cascade="all, delete-orphan")
+    notes = relationship("Note", back_populates="chat", cascade="all, delete-orphan")
     memories = relationship("UserMemory", back_populates="source_chat", cascade="all, delete-orphan")

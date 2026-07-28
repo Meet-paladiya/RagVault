@@ -16,6 +16,7 @@ from app.routers.chats import router as chats_router
 from app.routers.documents import router as documents_router
 from app.routers.messages import router as messages_router
 from app.routers.quiz import router as quiz_router
+from app.routers.notes import router as notes_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,6 +86,7 @@ app.include_router(chats_router)
 app.include_router(documents_router)
 app.include_router(messages_router)
 app.include_router(quiz_router)
+app.include_router(notes_router)
 
 
 # ─── Health Check ─────────────────────────────────────────────────────────────
