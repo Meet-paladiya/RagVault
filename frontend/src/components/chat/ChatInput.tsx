@@ -43,7 +43,7 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
       animate={{ y: 0, opacity: 1 }}
       className="px-4 pb-4"
     >
-      <div className="glass rounded-2xl border border-white/15 flex items-end gap-2 p-2 shadow-2xl focus-within:border-purple-500/50 transition-colors duration-200">
+      <div className="glass chat-input-container rounded-2xl border border-white/15 flex items-end gap-2 p-2 shadow-2xl focus-within:border-purple-500/50 transition-colors duration-200">
         <textarea
           ref={textareaRef}
           value={value}

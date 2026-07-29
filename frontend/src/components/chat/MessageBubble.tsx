@@ -54,7 +54,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       {/* Avatar */}
       <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
         isUser
-          ? 'bg-gradient-to-br from-purple-500 to-indigo-600'
+          ? 'bg-gradient-to-br from-purple-500 to-indigo-600 user-avatar'
           : 'bg-white/10 border border-white/20'
       }`}>
         {isUser ? <User className="w-4 h-4 text-white" /> : <Brain className="w-4 h-4 text-purple-400" />}
@@ -64,7 +64,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {/* Bubble */}
         <div className={`group relative rounded-2xl px-4 py-3 text-sm leading-relaxed ${
           isUser
-            ? 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-tr-sm'
+            ? 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-tr-sm user-message-bubble'
             : 'glass-card text-foreground rounded-tl-sm'
         }`}>
           {isUser ? (

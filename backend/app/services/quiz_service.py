@@ -27,7 +27,7 @@ _COMPACT_SCHEMA = """[
     "question": "Question text here (or sentence with '______' for fill in the blanks)",
     "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
     "answer": 0,
-    "explanation": "Brief 1-sentence explanation"
+    "explanation": "Clear 2-3 sentence paragraph explanation detailing why the correct answer is right and clarifying the key concept."
   }
 ]"""
 
@@ -42,7 +42,7 @@ def _build_batch_prompt(topic: str, context: str, qtype: str, count: int = 10) -
 
 Rules:
 - 4 concise options per question, exactly 1 correct answer (indicated by 0-based integer 'answer' index: 0, 1, 2, or 3).
-- 1 concise sentence explanation.
+- Provide a clear, educational 2 to 3 sentence paragraph explanation explaining the concept and why the correct answer is true.
 - Output ONLY valid JSON — no markdown fences, no extra text.
 - Use this exact schema:
 {_COMPACT_SCHEMA}
@@ -204,14 +204,32 @@ async def submit_quiz(
     questions: list[dict[str, Any]] = quiz.questions or []
     correct_count = 0
     wrong_topics: list[str] = []
+    wrong_questions: list[dict[str, Any]] = []
 
     for q in questions:
         qid = q.get("id", "")
         chosen = answers.get(qid)
-        if chosen == q.get("correct_option_id"):
+        correct_id = q.get("correct_option_id")
+        opts = q.get("options", [])
+
+        if chosen == correct_id:
             correct_count += 1
         else:
-            wrong_topics.append(q.get("question", "")[:80])
+            user_opt_text = next((str(opt.get("text", "")).strip() for opt in opts if opt.get("id") == chosen), "Not Answered")
+            correct_opt_text = next((str(opt.get("text", "")).strip() for opt in opts if opt.get("id") == correct_id), "Unknown")
+            q_text = str(q.get("question", "")).strip()
+            explanation = str(q.get("explanation", "")).strip()
+            if not explanation:
+                explanation = f"The correct answer is '{correct_opt_text}'. Please review the study materials for more details on this concept."
+
+            wrong_topics.append(q_text[:80])
+            wrong_questions.append({
+                "question_id": qid,
+                "question": q_text,
+                "user_answer": user_opt_text,
+                "correct_answer": correct_opt_text,
+                "explanation": explanation,
+            })
 
     total = len(questions)
     score = round(correct_count / total * 100, 1) if total else 0.0
@@ -222,11 +240,12 @@ async def submit_quiz(
     await db.refresh(quiz)
 
     logger.info(
-        "[QUIZ] Graded quiz %s: %d/%d correct (%.1f%%)",
+        "[QUIZ] Graded quiz %s: %d/%d correct (%.1f%%, %d wrong)",
         quiz_id,
         correct_count,
         total,
         score,
+        len(wrong_questions),
     )
 
     return {
@@ -235,10 +254,11 @@ async def submit_quiz(
         "total_questions": total,
         "correct_count": correct_count,
         "weak_topics": wrong_topics,
+        "wrong_questions": wrong_questions,
         "feedback": (
             "Excellent work!" if score >= 80
-            else "Good effort! Review the weak topics below."
+            else "Good effort! Review the incorrect questions below."
             if score >= 50
-            else "Keep studying — focus on the topics marked below."
+            else "Keep studying — review the paragraph explanations below for your incorrect answers."
         ),
     }

@@ -31,6 +31,13 @@ class QuizResponse(BaseModel):
 class QuizSubmitRequest(BaseModel):
     answers: Dict[str, str]
 
+class WrongQuestionDetail(BaseModel):
+    question_id: str
+    question: str
+    user_answer: str
+    correct_answer: str
+    explanation: str
+
 class QuizResultResponse(BaseModel):
     quiz_id: UUID
     score: float
@@ -38,6 +45,7 @@ class QuizResultResponse(BaseModel):
     correct_count: int
     weak_topics: List[str]
     feedback: str
+    wrong_questions: List[WrongQuestionDetail] = []
 
 class RecommendationResponse(BaseModel):
     chat_id: UUID

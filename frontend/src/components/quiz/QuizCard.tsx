@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, XCircle, CheckCircle2, BookOpen, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -131,7 +131,7 @@ export function QuizResults({ result, onRetry }: QuizResultsProps) {
       <p className="text-xs text-center text-muted-foreground">{result.feedback}</p>
 
       {/* Weak Topics */}
-      {result.weak_topics.length > 0 && (
+      {result.weak_topics && result.weak_topics.length > 0 && (
         <div>
           <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Needs review:</p>
           <div className="flex flex-wrap gap-1.5">
@@ -144,11 +144,64 @@ export function QuizResults({ result, onRetry }: QuizResultsProps) {
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex flex-col gap-2">
+      {/* Incorrect Questions & Paragraph Explanations */}
+      {result.wrong_questions && result.wrong_questions.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <h4 className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+              <XCircle className="w-4 h-4 text-red-400" />
+              Incorrect Questions ({result.wrong_questions.length})
+            </h4>
+          </div>
 
+          <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+            {result.wrong_questions.map((item, index) => (
+              <div
+                key={item.question_id || index}
+                className="glass-card rounded-xl p-3.5 border border-white/10 space-y-2.5 shadow-sm"
+              >
+                <p className="text-xs font-semibold text-foreground leading-snug">
+                  {index + 1}. {item.question}
+                </p>
+
+                <div className="grid grid-cols-1 gap-1.5 text-[11px]">
+                  <div className="flex items-start gap-1.5 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300">
+                    <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-medium opacity-80">Your Answer: </span>
+                      <span>{item.user_answer}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-1.5 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-medium opacity-80">Correct Answer: </span>
+                      <span className="font-semibold">{item.correct_answer}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Paragraph Explanation */}
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-xs leading-relaxed space-y-1">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-300">
+                    <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Paragraph Explanation:</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {item.explanation}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex flex-col gap-2 pt-2">
         <Button onClick={onRetry} variant="outline" size="sm" className="w-full border-white/15">
-          Try Again
+          <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Try Again
         </Button>
       </div>
     </motion.div>
