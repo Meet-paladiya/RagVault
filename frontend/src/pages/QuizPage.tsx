@@ -59,13 +59,12 @@ function ChatQuizSection({ chatId, chatTitle }: { chatId: string; chatTitle: str
               className="glass-card rounded-xl p-4 flex items-center gap-4"
             >
               {/* Score Circle */}
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${
-                pct == null ? 'bg-white/10 text-muted-foreground'
-                : pct >= 80 ? 'bg-green-500/20 text-green-400'
-                : pct >= 50 ? 'bg-purple-500/20 text-purple-400'
-                : 'bg-red-500/20 text-red-400'
-              }`}>
-                {pct != null ? `${pct}%` : '–'}
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${pct == null ? 'bg-white/10 text-muted-foreground'
+                  : pct >= 80 ? 'bg-green-500/20 text-green-400'
+                    : pct >= 50 ? 'bg-purple-500/20 text-purple-400'
+                      : 'bg-red-500/20 text-red-400'
+                }`}>
+
               </div>
 
               <div className="flex-1 min-w-0">

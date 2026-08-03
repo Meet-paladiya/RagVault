@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History
+  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History, Sun, Moon
 } from 'lucide-react'
 import { useChats, useCreateChat } from '@/api/chats'
 import { useAuthStore } from '@/store/authStore'
+import { useThemeStore } from '@/store/themeStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -22,6 +23,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { chatId } = useParams()
   const navigate = useNavigate()
   const { user, clearAuth } = useAuthStore()
+  const { theme, toggleTheme } = useThemeStore()
   const { data: chatsData } = useChats()
   const createChat = useCreateChat()
   const { toast } = useToast()
@@ -58,7 +60,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       className="relative flex flex-col h-full glass border-r border-white/10 overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
+      <div className={`flex items-center gap-3 px-4 py-4 border-b border-white/10 ${collapsed ? 'flex-col justify-center py-3' : ''}`}>
         <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
           <Brain className="w-4 h-4 text-white" />
         </div>
@@ -71,12 +73,19 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             RagVault
           </motion.span>
         )}
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onToggle}
-          className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+          title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          className={`w-7 h-7 rounded-lg transition-all ${
+            collapsed
+              ? 'mx-auto mt-1 bg-primary/20 hover:bg-primary/40 border border-primary/40 text-foreground shadow-md'
+              : 'ml-auto text-muted-foreground hover:text-foreground hover:bg-white/10'
+          }`}
         >
           <ChevronLeft className={`w-4 h-4 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
-        </button>
+        </Button>
       </div>
 
       {!collapsed && (
@@ -153,13 +162,42 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </ScrollArea>
 
       {/* Bottom Nav */}
-      {!collapsed && (
+      {!collapsed ? (
         <div className="border-t border-white/10 px-3 py-3 space-y-1">
           <Link to="/quiz">
             <Button variant="ghost" size="sm" className="w-full justify-start text-xs h-8">
               <History className="w-3.5 h-3.5 mr-2" /> Quiz History
             </Button>
           </Link>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-xs h-8"
+            onClick={toggleTheme}
+          >
+            {theme === 'light' ? (
+              <>
+                <Moon className="w-3.5 h-3.5 mr-2 text-indigo-400" /> Dark Mode
+              </>
+            ) : (
+              <>
+                <Sun className="w-3.5 h-3.5 mr-2 text-amber-400" /> Day Mode
+              </>
+            )}
+          </Button>
+        </div>
+      ) : (
+        <div className="border-t border-white/10 p-2 flex justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 text-muted-foreground hover:text-foreground"
+            onClick={toggleTheme}
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Day Mode'}
+          >
+            {theme === 'light' ? <Moon className="w-4 h-4 text-indigo-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
+          </Button>
         </div>
       )}
 

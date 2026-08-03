@@ -80,6 +80,14 @@ export interface Quiz {
   created_at: string;
 }
 
+export interface WrongQuestionDetail {
+  question_id: string;
+  question: string;
+  user_answer: string;
+  correct_answer: string;
+  explanation: string;
+}
+
 export interface QuizResult {
   quiz_id: string;
   score: number;
@@ -87,6 +95,7 @@ export interface QuizResult {
   correct_count: number;
   weak_topics: string[];
   feedback: string;
+  wrong_questions?: WrongQuestionDetail[];
 }
 
 export interface RecommendationResponse {

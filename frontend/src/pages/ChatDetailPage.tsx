@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useMessages, streamMessage } from '@/api/messages'
 import { useChat, useClearKnowledge } from '@/api/chats'
+import { useDocuments } from '@/api/documents'
 import { useGenerateQuiz, useSubmitQuiz } from '@/api/quiz'
 import { useNotes, useGenerateNotes } from '@/api/notes'
 import { DocumentList } from '@/components/documents/DocumentList'
@@ -64,6 +65,8 @@ export function ChatDetailPage() {
   }, [chatId])
 
   const { data: messagesData } = useMessages(chatId!)
+  const { data: docsData } = useDocuments(chatId!)
+  const docCount = docsData?.documents?.length ?? 0
   const { data: notesData } = useNotes(chatId!)
   const generateNotes = useGenerateNotes(chatId!)
   const clearKnowledge = useClearKnowledge()
@@ -191,7 +194,7 @@ export function ChatDetailPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold text-foreground">Documents</h3>
             <Badge variant="secondary" className="text-[10px]">
-              {messages.filter((m) => m.role === 'assistant').length} answers
+              {docCount} {docCount === 1 ? 'file' : 'files'}
             </Badge>
           </div>
         </div>
@@ -381,7 +384,7 @@ export function ChatDetailPage() {
                     <Button
                       onClick={handleOpenNotes}
                       disabled={generateNotes.isPending}
-                      className="w-full btn-gradient text-white border-0 h-8 text-xs rounded-lg mt-1"
+                      className="w-full btn-gradient text-white border-0 h-8 text-xs rounded-lg mt-1 quiz-generate-btn"
                     >
                       {generateNotes.isPending ? (
                         <>
@@ -395,26 +398,6 @@ export function ChatDetailPage() {
                       )}
                     </Button>
                   </div>
-
-                  {notesData && (
-                    <div className="bg-purple-950/20 border border-purple-500/20 rounded-xl p-3.5 space-y-2">
-                      <div className="flex items-center justify-between text-xs text-purple-300 font-medium">
-                        <span>Latest Notes</span>
-                        <Badge variant="secondary" className="text-[9px]">
-                          {notesData.cards.length} cards
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{notesData.title}</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full h-7 text-[11px] border-white/10"
-                        onClick={handleOpenNotes}
-                      >
-                        Open Cards View →
-                      </Button>
-                    </div>
-                  )}
                 </div>
               ) : (
                 /* RHS Quiz Content */
@@ -441,7 +424,7 @@ export function ChatDetailPage() {
 
                     {/* Section 1: Auto Quiz */}
                     {selectedQuizType !== 'topic' && (
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5 shadow-sm">
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5 shadow-sm quiz-card-box">
                         <div className="flex items-center gap-1.5">
                           <Brain className="w-4 h-4 text-purple-400" />
                           <h5 className="text-xs font-semibold">Auto Quiz (All Docs)</h5>
@@ -452,7 +435,7 @@ export function ChatDetailPage() {
                         <Button
                           onClick={() => handleGenerateQuiz('auto', 'General Summary')}
                           disabled={generateQuiz.isPending}
-                          className="w-full btn-gradient text-white border-0 h-8 text-[11px] rounded-lg mt-1"
+                          className="w-full btn-gradient text-white border-0 h-8 text-[11px] rounded-lg mt-1 quiz-generate-btn"
                         >
                           {generateQuiz.isPending && selectedQuizType === 'auto'
                             ? 'Generating 20 Questions…'
@@ -463,7 +446,7 @@ export function ChatDetailPage() {
 
                     {/* Section 2: Topic Quiz */}
                     {selectedQuizType !== 'auto' && (
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5 shadow-sm">
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5 shadow-sm quiz-card-box">
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-4 h-4 text-purple-400" />
                           <h5 className="text-xs font-semibold">Topic Quiz</h5>
@@ -478,12 +461,12 @@ export function ChatDetailPage() {
                             onKeyDown={(e) => e.key === 'Enter' && handleGenerateQuiz('topic', quizTopic)}
                             placeholder="e.g. Neural networks"
                             disabled={generateQuiz.isPending}
-                            className="h-8 text-xs bg-white/5 border-white/10 focus-visible:ring-1 focus-visible:ring-purple-500/50"
+                            className="h-8 text-xs bg-white/5 border-white/10 focus-visible:ring-1 focus-visible:ring-purple-500/50 quiz-topic-input"
                           />
                           <Button
                             onClick={() => handleGenerateQuiz('topic', quizTopic)}
                             disabled={!quizTopic.trim() || generateQuiz.isPending}
-                            className="w-full btn-gradient text-white border-0 h-8 text-[11px] rounded-lg"
+                            className="w-full btn-gradient text-white border-0 h-8 text-[11px] rounded-lg quiz-generate-btn"
                           >
                             {generateQuiz.isPending && selectedQuizType === 'topic'
                               ? 'Generating 20 Questions…'
