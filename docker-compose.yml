@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ─────────────────────────────────────────────────────────────────────────────
 #  Offline AI Knowledge Hub — Docker Compose
 #  Services: postgres | chromadb | ollama | backend | frontend
@@ -34,12 +32,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-knowledge_user} -d ${POSTGRES_DB:-knowledge_hub}"]
-      interval: 10s
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-knowledge_user} -d ${POSTGRES_DB:-knowledge_hub}" ]
+      interval: 15s
       timeout: 5s
       retries: 5
     ports:
-      - "5432:5432"  # Expose for local dev; remove in production
+      - "5432:5432" # Expose for local dev; remove in production
 
   # ── ChromaDB ───────────────────────────────────────────────────────────────
   chromadb:
@@ -54,13 +52,9 @@ services:
       - ANONYMIZED_TELEMETRY=FALSE
     volumes:
       - chroma_data:/chroma_data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+
     ports:
-      - "8001:8000"  # Expose for local dev inspection
+      - "8001:8000" # Expose for local dev inspection
 
   # ── Ollama (Local LLM Runtime) ─────────────────────────────────────────────
   ollama:
@@ -84,7 +78,7 @@ services:
     #           count: 1
     #           capabilities: [gpu]
 
-  # ── Backend (FastAPI) ──────────────────────────────────────────────────────
+    # ── Backend (FastAPI) ──────────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -97,7 +91,7 @@ services:
       postgres:
         condition: service_healthy
       chromadb:
-        condition: service_healthy
+        condition: service_started
       ollama:
         condition: service_started
     env_file:
@@ -115,10 +109,7 @@ services:
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")'" ]
 
   # ── Frontend (React + Vite, served via Nginx) ──────────────────────────────
   frontend:
