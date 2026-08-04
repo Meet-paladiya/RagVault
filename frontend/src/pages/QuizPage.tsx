@@ -14,7 +14,7 @@ export function QuizPage() {
     <div className="h-full flex flex-col overflow-hidden">
       <div className="px-6 py-5 border-b border-white/10">
         <div className="flex items-center gap-2">
-          <History className="w-5 h-5 text-purple-400" />
+          <History className="w-5 h-5 text-primary" />
           <h1 className="text-lg font-semibold">Quiz History</h1>
         </div>
         <p className="text-xs text-muted-foreground mt-1">All your quiz results across knowledge spaces</p>
@@ -60,16 +60,16 @@ function ChatQuizSection({ chatId, chatTitle }: { chatId: string; chatTitle: str
             >
               {/* Score Circle */}
               <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${pct == null ? 'bg-white/10 text-muted-foreground'
-                  : pct >= 80 ? 'bg-green-500/20 text-green-400'
-                    : pct >= 50 ? 'bg-purple-500/20 text-purple-400'
-                      : 'bg-red-500/20 text-red-400'
+                  : pct >= 80 ? 'bg-success/20 text-success'
+                    : pct >= 50 ? 'bg-primary/20 text-primary'
+                      : 'bg-destructive/20 text-destructive'
                 }`}>
 
               </div>
 
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-purple-400" />
+                  <Zap className="w-3.5 h-3.5 text-primary" />
                   {quiz.topic}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">

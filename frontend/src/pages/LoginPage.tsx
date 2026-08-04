@@ -28,13 +28,13 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left — animated hero */}
-      <div className="hidden lg:flex flex-1 items-center justify-center relative overflow-hidden bg-gradient-to-br from-purple-900/40 via-background to-indigo-900/30">
+      <div className="hidden lg:flex flex-1 items-center justify-center relative overflow-hidden bg-gradient-to-br from-primary/20 via-background to-surface">
         <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-purple-600/20 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/3 right-1/4 w-48 h-48 bg-indigo-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/20 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-1/3 right-1/4 w-48 h-48 bg-primary/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
         <div className="relative z-10 text-center px-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center mx-auto mb-6 animate-glow">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center mx-auto mb-6 animate-glow">
             <Brain className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-4xl font-bold gradient-text mb-3">RagVault</h1>
@@ -44,7 +44,7 @@ export function LoginPage() {
           <div className="mt-8 flex flex-col gap-3 text-sm text-muted-foreground">
             {['100% offline — no internet required', 'PDF, PPTX, Video, Audio support', 'AI quizzes & personalised study plans'].map((f) => (
               <div key={f} className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-400" />
+                <Sparkles className="w-4 h-4 text-primary" />
                 <span>{f}</span>
               </div>
             ))}
@@ -109,7 +109,7 @@ export function LoginPage() {
 
             <p className="text-xs text-muted-foreground text-center mt-6">
               Don't have an account?{' '}
-              <Link to="/register" className="text-purple-400 hover:text-purple-300 font-medium">
+              <Link to="/register" className="text-primary hover:underline font-medium">
                 Register
               </Link>
             </p>

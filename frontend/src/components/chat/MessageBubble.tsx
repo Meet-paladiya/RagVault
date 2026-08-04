@@ -54,17 +54,17 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       {/* Avatar */}
       <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
         isUser
-          ? 'bg-gradient-to-br from-purple-500 to-indigo-600 user-avatar'
+          ? 'bg-gradient-to-br from-primary to-blue-600 user-avatar'
           : 'bg-white/10 border border-white/20'
       }`}>
-        {isUser ? <User className="w-4 h-4 text-white" /> : <Brain className="w-4 h-4 text-purple-400" />}
+        {isUser ? <User className="w-4 h-4 text-white" /> : <Brain className="w-4 h-4 text-primary" />}
       </div>
 
       <div className={`flex flex-col max-w-[78%] ${isUser ? 'items-end' : 'items-start'}`}>
         {/* Bubble */}
         <div className={`group relative rounded-2xl px-4 py-3 text-sm leading-relaxed ${
           isUser
-            ? 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-tr-sm user-message-bubble'
+            ? 'bg-gradient-to-br from-primary to-blue-600 text-white rounded-tr-sm user-message-bubble'
             : 'glass-card text-foreground rounded-tl-sm'
         }`}>
           {isUser ? (
@@ -101,7 +101,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <div className="mt-1.5 w-full">
             <button
               onClick={() => setCitationsOpen((v) => !v)}
-              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-purple-400 transition-colors"
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors"
             >
               <BookOpen className="w-3 h-3" />
               <span>{citations.length} source{citations.length > 1 ? 's' : ''}</span>
@@ -120,7 +120,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                     <Badge
                       key={i}
                       variant="secondary"
-                      className="text-[10px] bg-purple-500/15 text-purple-300 border border-purple-500/30 px-2 py-0.5"
+                      className="text-[10px] bg-primary/15 text-primary border border-primary/30 px-2 py-0.5"
                     >
                       {c.source} · p.{c.page}
                     </Badge>
@@ -137,12 +137,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <button
             onClick={handleCopy}
             title="Copy message"
-            className="hover:text-purple-300 transition-colors p-0.5 rounded opacity-70 hover:opacity-100 flex items-center gap-0.5"
+            className="hover:text-primary transition-colors p-0.5 rounded opacity-70 hover:opacity-100 flex items-center gap-0.5"
           >
             {copied ? (
               <>
-                <Check className="w-3 h-3 text-green-400" />
-                <span className="text-[9px] text-green-400 font-medium">Copied</span>
+                <Check className="w-3 h-3 text-success" />
+                <span className="text-[9px] text-success font-medium">Copied</span>
               </>
             ) : (
               <Copy className="w-3 h-3" />
@@ -162,7 +162,7 @@ export function StreamingBubble({ content }: { content: string }) {
       className="flex gap-3 mb-4"
     >
       <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-white/10 border border-white/20">
-        <Brain className="w-4 h-4 text-purple-400 animate-pulse" />
+        <Brain className="w-4 h-4 text-primary animate-pulse" />
       </div>
       <div className="glass-card rounded-2xl rounded-tl-sm px-4 py-3 text-sm max-w-[78%]">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || '▍'}</ReactMarkdown>

@@ -66,8 +66,8 @@ export function QuizCard({ quiz, onSubmit, isSubmitting }: QuizCardProps) {
               whileTap={{ scale: 0.99 }}
               onClick={() => handleSelect(opt.id)}
               className={`w-full text-left px-3.5 py-3 rounded-lg text-xs font-medium transition-all border ${selected
-                  ? 'bg-purple-600/20 border-purple-500/60 text-purple-200'
-                  : 'glass border-white/10 hover:border-purple-500/30 hover:bg-white/5'
+                  ? 'bg-primary/20 border-primary/60 text-foreground'
+                  : 'glass border-white/10 hover:border-primary/30 hover:bg-white/5'
                 }`}
             >
               <span className="mr-2 font-bold text-muted-foreground">{opt.id.toUpperCase()}.</span>
@@ -113,7 +113,7 @@ export function QuizResults({ result, onRetry }: QuizResultsProps) {
           <circle cx="50" cy="50" r="40" fill="none" stroke="hsl(var(--border))" strokeWidth="8" />
           <motion.circle
             cx="50" cy="50" r="40" fill="none"
-            stroke={pct >= 80 ? '#22c55e' : pct >= 50 ? '#a855f7' : '#ef4444'}
+            stroke={pct >= 80 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444'}
             strokeWidth="8"
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -136,7 +136,7 @@ export function QuizResults({ result, onRetry }: QuizResultsProps) {
           <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Needs review:</p>
           <div className="flex flex-wrap gap-1.5">
             {result.weak_topics.slice(0, 5).map((t, i) => (
-              <Badge key={i} className="text-[10px] bg-orange-500/15 text-orange-400 border-orange-500/30">
+              <Badge key={i} className="text-[10px] bg-warning/15 text-warning border-warning/30">
                 {t.length > 40 ? t.slice(0, 40) + '…' : t}
               </Badge>
             ))}
@@ -184,8 +184,8 @@ export function QuizResults({ result, onRetry }: QuizResultsProps) {
 
                 {/* Paragraph Explanation */}
                 <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-xs leading-relaxed space-y-1">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-300">
-                    <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary">
+                    <BookOpen className="w-3.5 h-3.5 text-primary" />
                     <span>Paragraph Explanation:</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">

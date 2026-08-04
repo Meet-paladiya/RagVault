@@ -63,8 +63,8 @@ export function DropZone({ chatId }: DropZoneProps) {
       whileHover={{ scale: 1.01 }}
       className={`border-2 border-dashed rounded-xl p-3 cursor-pointer transition-colors duration-200 ${
         isDragActive
-          ? 'border-purple-500 bg-purple-500/10 animate-glow'
-          : 'border-white/15 hover:border-purple-500/50 hover:bg-white/3'
+          ? 'border-primary bg-primary/10 animate-glow'
+          : 'border-white/15 hover:border-primary/50 hover:bg-white/3'
       }`}
     >
       <input {...getInputProps()} />
@@ -73,7 +73,7 @@ export function DropZone({ chatId }: DropZoneProps) {
           animate={isDragActive ? { scale: [1, 1.15, 1], rotate: [0, -5, 5, 0] } : {}}
           transition={{ repeat: isDragActive ? Infinity : 0, duration: 0.6 }}
         >
-          <UploadCloud className={`w-6 h-6 ${isDragActive ? 'text-purple-400' : 'text-muted-foreground'}`} />
+          <UploadCloud className={`w-6 h-6 ${isDragActive ? 'text-primary' : 'text-muted-foreground'}`} />
         </motion.div>
         <p className="text-xs font-medium text-foreground">
           {isDragActive ? 'Drop to upload' : 'Drag & drop files'}

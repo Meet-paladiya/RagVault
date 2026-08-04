@@ -6,70 +6,38 @@
 
 @layer base {
   :root {
-    /* Dark Mode (Default) */
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
+    /* Default theme variables populated dynamically by src/theme.ts */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
 
-    --card: 224 71% 7%;
-    --card-foreground: 213 31% 91%;
+    --surface: 217 33% 17%;
+    --card: 215 30% 22%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 224 71% 7%;
-    --popover-foreground: 215 20.2% 65.1%;
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 263 90% 65%;
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222.2 47.4% 11.2%;
+    --secondary: 215 30% 22%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
+    --muted: 215 30% 22%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 216 34% 17%;
+    --accent: 215 30% 22%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
 
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
-    --ring: 263 90% 65%;
-
-    --radius: 0.75rem;
-  }
-
-  .light {
-    /* Day Mode with #C4EED0 background and #1A3A2B text color */
-    --background: 137 45% 85%;
-    /* #C4EED0 soft mint green */
-    --foreground: 152 38% 16%;
-    /* #1A3A2B deep forest pine green */
-
-    --card: 137 38% 89%;
-    --card-foreground: 152 38% 16%;
-
-    --popover: 137 38% 91%;
-    --popover-foreground: 152 38% 16%;
-
-    --primary: 152 48% 28%;
-    /* #1A3A2B forest pine primary */
-    --primary-foreground: 137 45% 96%;
-
-    --secondary: 137 30% 76%;
-    --secondary-foreground: 152 38% 16%;
-
-    --muted: 137 25% 75%;
-    --muted-foreground: 152 25% 30%;
-
-    --accent: 137 35% 78%;
-    --accent-foreground: 152 38% 16%;
-
-    --destructive: 0 65% 42%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 152 25% 68%;
-    --input: 152 25% 68%;
-    --ring: 152 48% 28%;
+    --border: 215 25% 27%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
 
     --radius: 0.75rem;
   }
@@ -90,181 +58,21 @@
 /* ── Glassmorphism utilities ──────────────────────────────────────────────── */
 @layer utilities {
   .glass {
-    @apply bg-white/5 backdrop-blur-md border border-white/10;
+    background-color: hsl(var(--surface) / 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border) / 0.4);
   }
 
   .glass-card {
-    @apply bg-card/80 backdrop-blur-xl border border-white/10 shadow-2xl;
+    background-color: hsl(var(--card) / 0.9);
+    backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--border) / 0.5);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.15);
   }
 
   .gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-br from-purple-400 to-indigo-500;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-blue-500 to-primary;
   }
-}
-
-/* Day Mode Glass & Gradient Overrides */
-.light .glass {
-  background-color: rgba(255, 255, 255, 0.45);
-  border-color: rgba(26, 58, 43, 0.18);
-}
-
-.light .glass-card {
-  background-color: rgba(215, 245, 224, 0.85);
-  border-color: rgba(26, 58, 43, 0.1);
-  box-shadow: 0 10px 30px rgba(26, 58, 43, 0.08);
-}
-
-.light .gradient-text {
-  background: linear-gradient(135deg, #1A3A2B, #2B6E4F);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.light .btn-gradient {
-  background: linear-gradient(135deg, #1A3A2B, #2B6E4F);
-  color: #ffffff;
-}
-
-.light .btn-gradient:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1A3A2B, #22573E);
-}
-
-/* Day Mode User Input Box Vice-Versa Colors (#1A3A2B background with #C4EED0 text) */
-.light .chat-input-container {
-  background-color: #1A3A2B !important;
-  border-color: rgba(26, 58, 43, 0.4) !important;
-  box-shadow: 0 12px 35px rgba(26, 58, 43, 0.25) !important;
-}
-
-.light .chat-input-container textarea {
-  color: #C4EED0 !important;
-}
-
-.light .chat-input-container textarea::placeholder {
-  color: rgba(196, 238, 208, 0.65) !important;
-}
-
-.light .chat-input-container button {
-  background: linear-gradient(135deg, #C4EED0, #98E2AF) !important;
-  color: #1A3A2B !important;
-}
-
-.light .chat-input-container button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #B2E8C0, #80D89A) !important;
-  color: #1A3A2B !important;
-}
-
-/* Day Mode User Message Bubbles (Right Side) Vice-Versa Overrides */
-.light .user-message-bubble {
-  background: #1A3A2B !important;
-  color: #C4EED0 !important;
-  box-shadow: 0 4px 15px rgba(26, 58, 43, 0.2) !important;
-}
-
-.light .user-message-bubble p {
-  color: #C4EED0 !important;
-}
-
-.light .user-avatar {
-  background: #1A3A2B !important;
-  border-color: rgba(196, 238, 208, 0.4) !important;
-}
-
-.light .user-avatar svg {
-  color: #C4EED0 !important;
-}
-
-/* Day Mode Quiz Section High Contrast Overrides */
-.light .quiz-card-box {
-  background-color: rgba(255, 255, 255, 0.55) !important;
-  border-color: rgba(26, 58, 43, 0.25) !important;
-  box-shadow: 0 4px 15px rgba(26, 58, 43, 0.06) !important;
-}
-
-.light .quiz-card-box h4,
-.light .quiz-card-box h5 {
-  color: #1A3A2B !important;
-  font-weight: 700 !important;
-}
-
-.light .quiz-card-box p {
-  color: rgba(26, 58, 43, 0.85) !important;
-}
-
-.light .quiz-topic-input {
-  background-color: #E2F7E8 !important;
-  color: #1A3A2B !important;
-  border: 1px solid rgba(26, 58, 43, 0.25) !important;
-  font-weight: 500 !important;
-}
-
-.light .quiz-topic-input::placeholder {
-  color: rgba(26, 58, 43, 0.6) !important;
-}
-
-/* Day Mode Generate Quiz Button Vice-Versa Overrides (#1A3A2B background with #C4EED0 text) */
-.light .quiz-generate-btn,
-.light button.quiz-generate-btn {
-  background: #1A3A2B !important;
-  background-image: none !important;
-  color: #C4EED0 !important;
-  border: 1px solid #1A3A2B !important;
-  box-shadow: 0 4px 12px rgba(26, 58, 43, 0.25) !important;
-  font-weight: 600 !important;
-}
-
-.light .quiz-generate-btn:hover:not(:disabled) {
-  background: #122B20 !important;
-  background-image: none !important;
-  color: #FFFFFF !important;
-}
-
-.light .quiz-generate-btn:disabled {
-  opacity: 0.7 !important;
-  background: #1A3A2B !important;
-  background-image: none !important;
-  color: rgba(196, 238, 208, 0.65) !important;
-  border-color: #1A3A2B !important;
-}
-
-/* Day Mode Global Purple-to-#1A3A2B Overrides */
-.light [class*="text-purple-"],
-.light .text-purple-300,
-.light .text-purple-400,
-.light .text-purple-500,
-.light .text-purple-600 {
-  color: #1A3A2B !important;
-}
-
-.light [class*="bg-purple-"],
-.light .bg-purple-500\/10,
-.light .bg-purple-500\/20,
-.light .bg-purple-600,
-.light .bg-purple-950\/20 {
-  background-color: rgba(26, 58, 43, 0.12) !important;
-}
-
-.light [class*="border-purple-"],
-.light .border-purple-500\/20,
-.light .border-purple-500\/30,
-.light .border-purple-500\/40,
-.light .border-purple-500\/50 {
-  border-color: rgba(26, 58, 43, 0.35) !important;
-}
-
-.light .bg-purple-400,
-.light .bg-purple-500,
-.light .bg-purple-600,
-.light span.bg-purple-400 {
-  background-color: #1A3A2B !important;
-}
-
-.light .bg-primary\/20 {
-  background-color: rgba(26, 58, 43, 0.18) !important;
-}
-
-.light .text-primary {
-  color: #1A3A2B !important;
 }
 
 /* ── Custom Scrollbar ─────────────────────────────────────────────────────── */
@@ -312,14 +120,13 @@
 }
 
 @keyframes pulse-glow {
-
   0%,
   100% {
-    box-shadow: 0 0 0 0 hsl(263 90% 65% / 0);
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
   }
 
   50% {
-    box-shadow: 0 0 16px 4px hsl(263 90% 65% / 0.35);
+    box-shadow: 0 0 16px 4px hsl(var(--primary) / 0.35);
   }
 }
 
@@ -337,12 +144,13 @@
 
 /* ── Gradient button ──────────────────────────────────────────────────────── */
 .btn-gradient {
-  background: linear-gradient(135deg, hsl(263 90% 65%), hsl(234 89% 63%));
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.85));
+  color: #ffffff;
   transition: background 0.2s ease, opacity 0.2s ease;
 }
 
 .btn-gradient:hover:not(:disabled) {
-  background: linear-gradient(135deg, hsl(263 90% 60%), hsl(234 89% 58%));
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.9), hsl(var(--primary) / 0.75));
 }
 
 .btn-gradient:disabled {

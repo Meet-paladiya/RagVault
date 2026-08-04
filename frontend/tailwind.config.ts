@@ -57,6 +57,10 @@ const config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        surface: 'hsl(var(--surface))',
+        success: 'hsl(var(--success))',
+        warning: 'hsl(var(--warning))',
+        secondaryText: 'hsl(var(--muted-foreground))',
       },
       borderRadius: {
         lg: 'var(--radius)',

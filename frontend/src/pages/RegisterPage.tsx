@@ -29,13 +29,13 @@ export function RegisterPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
-      <div className="hidden lg:flex flex-1 items-center justify-center relative overflow-hidden bg-gradient-to-br from-indigo-900/40 via-background to-purple-900/30">
+      <div className="hidden lg:flex flex-1 items-center justify-center relative overflow-hidden bg-gradient-to-br from-surface via-background to-primary/20">
         <div className="absolute inset-0">
-          <div className="absolute top-1/3 left-1/3 w-64 h-64 bg-indigo-600/20 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/3 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1.5s' }} />
+          <div className="absolute top-1/3 left-1/3 w-64 h-64 bg-primary/20 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/3 w-48 h-48 bg-blue-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1.5s' }} />
         </div>
         <div className="relative z-10 text-center px-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-6 animate-glow">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center mx-auto mb-6 animate-glow">
             <Brain className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-4xl font-bold gradient-text mb-3">Start Learning</h1>
@@ -85,7 +85,7 @@ export function RegisterPage() {
 
             <p className="text-xs text-muted-foreground text-center mt-6">
               Already have an account?{' '}
-              <Link to="/login" className="text-purple-400 hover:text-purple-300 font-medium">Sign in</Link>
+              <Link to="/login" className="text-primary hover:underline font-medium">Sign in</Link>
             </p>
           </div>
         </motion.div>

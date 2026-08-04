@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useThemeStore } from '@/store/themeStore'
+import { themes } from '@/theme'
 
 interface KnowledgeNetworkCanvasProps {
   className?: string
@@ -27,11 +28,11 @@ export function KnowledgeNetworkCanvas({ className = '' }: KnowledgeNetworkCanva
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     container.appendChild(renderer.domElement)
 
-    // 2. Colors based on theme
-    const isLight = theme === 'light'
-    const primaryColor = isLight ? 0x1a3a2b : 0x8b5cf6
-    const secondaryColor = isLight ? 0x2b6e4f : 0x6366f1
-    const particleColor = isLight ? 0x22573e : 0xc084fc
+    // 2. Colors based on central theme
+    const palette = themes[theme] || themes.dark
+    const primaryColor = parseInt(palette.primary.replace('#', ''), 16)
+    const secondaryColor = parseInt(palette.card.replace('#', ''), 16)
+    const particleColor = parseInt(palette.secondaryText.replace('#', ''), 16)
 
     // 3. Central AI Core Sphere (Geodesic Wireframe)
     const coreGroup = new THREE.Group()
@@ -42,7 +43,7 @@ export function KnowledgeNetworkCanvas({ className = '' }: KnowledgeNetworkCanva
       color: primaryColor,
       wireframe: true,
       transparent: true,
-      opacity: isLight ? 0.35 : 0.45,
+      opacity: 0.45,
     })
     const coreMesh = new THREE.Mesh(coreGeo, coreMat)
     coreGroup.add(coreMesh)
@@ -52,7 +53,7 @@ export function KnowledgeNetworkCanvas({ className = '' }: KnowledgeNetworkCanva
     const innerMat = new THREE.MeshBasicMaterial({
       color: secondaryColor,
       transparent: true,
-      opacity: isLight ? 0.6 : 0.7,
+      opacity: 0.7,
     })
     const innerMesh = new THREE.Mesh(innerGeo, innerMat)
     coreGroup.add(innerMesh)
@@ -108,7 +109,7 @@ export function KnowledgeNetworkCanvas({ className = '' }: KnowledgeNetworkCanva
     const lineMat = new THREE.LineBasicMaterial({
       color: secondaryColor,
       transparent: true,
-      opacity: isLight ? 0.25 : 0.35,
+      opacity: 0.35,
     })
     const linesMesh = new THREE.LineSegments(lineGeo, lineMat)
     nodesGroup.add(linesMesh)

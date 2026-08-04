@@ -25,12 +25,12 @@ export function NotesGeneratingGraphic() {
       <motion.div
         animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.6, 0.3] }}
         transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute w-72 h-72 rounded-full bg-purple-600/15 blur-3xl pointer-events-none"
+        className="absolute w-72 h-72 rounded-full bg-primary/15 blur-3xl pointer-events-none"
       />
       <motion.div
         animate={{ scale: [1.2, 1, 1.2], opacity: [0.2, 0.5, 0.2] }}
         transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute w-60 h-60 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none"
+        className="absolute w-60 h-60 rounded-full bg-blue-500/15 blur-3xl pointer-events-none"
       />
 
       {/* Main Central Graphics Container */}
@@ -40,14 +40,14 @@ export function NotesGeneratingGraphic() {
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-            className="w-32 h-32 rounded-full border-2 border-dashed border-purple-500/40 p-2 flex items-center justify-center"
+            className="w-32 h-32 rounded-full border-2 border-dashed border-primary/40 p-2 flex items-center justify-center"
           />
 
           {/* Pulsing Core */}
           <motion.div
             animate={{ scale: [0.95, 1.08, 0.95] }}
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute w-24 h-24 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-purple-500/30 border border-white/20"
+            className="absolute w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/30 border border-white/20"
           >
             <Brain className="w-12 h-12 text-white animate-pulse" />
           </motion.div>
@@ -56,7 +56,7 @@ export function NotesGeneratingGraphic() {
           <motion.div
             animate={{ y: [-6, 6, -6], x: [-4, 4, -4] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute -top-3 -right-4 bg-purple-950/80 border border-purple-400/30 backdrop-blur-md p-2 rounded-xl text-purple-300 shadow-md flex items-center gap-1 text-[11px] font-medium"
+            className="absolute -top-3 -right-4 bg-surface border border-primary/30 backdrop-blur-md p-2 rounded-xl text-primary shadow-md flex items-center gap-1 text-[11px] font-medium"
           >
             <FileText className="w-3.5 h-3.5" /> Chunks
           </motion.div>
@@ -64,7 +64,7 @@ export function NotesGeneratingGraphic() {
           <motion.div
             animate={{ y: [6, -6, 6], x: [4, -4, 4] }}
             transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute -bottom-3 -left-4 bg-indigo-950/80 border border-indigo-400/30 backdrop-blur-md p-2 rounded-xl text-indigo-300 shadow-md flex items-center gap-1 text-[11px] font-medium"
+            className="absolute -bottom-3 -left-4 bg-surface border border-blue-400/30 backdrop-blur-md p-2 rounded-xl text-primary shadow-md flex items-center gap-1 text-[11px] font-medium"
           >
             <Layers className="w-3.5 h-3.5" /> Cards
           </motion.div>
@@ -72,7 +72,7 @@ export function NotesGeneratingGraphic() {
 
         {/* Title */}
         <div className="flex items-center gap-2 mb-2">
-          <Sparkles className="w-5 h-5 text-purple-400 animate-spin" />
+          <Sparkles className="w-5 h-5 text-primary animate-spin" />
           <h3 className="text-lg font-bold gradient-text">Generating AI Study Notes</h3>
         </div>
 
@@ -82,9 +82,9 @@ export function NotesGeneratingGraphic() {
 
         {/* Dynamic Progress Indicator */}
         <div className="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 backdrop-blur-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-purple-300 font-medium">
+          <div className="flex items-center justify-between text-xs text-primary font-medium">
             <span className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-primary animate-pulse" />
               {STEPS[currentStep]}
             </span>
             <span className="text-[10px] text-muted-foreground">{currentStep + 1} / {STEPS.length}</span>
@@ -97,7 +97,7 @@ export function NotesGeneratingGraphic() {
               initial={{ width: '0%' }}
               animate={{ width: '100%' }}
               transition={{ duration: 2.8, ease: 'linear' }}
-              className="h-full bg-gradient-to-r from-purple-500 to-indigo-500"
+              className="h-full bg-gradient-to-r from-primary to-blue-500"
             />
           </div>
         </div>

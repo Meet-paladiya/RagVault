@@ -1,11 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-
-export type Theme = 'dark' | 'light'
+import { applyTheme, ThemeMode } from '@/theme'
 
 interface ThemeState {
-  theme: Theme
-  setTheme: (theme: Theme) => void
+  theme: ThemeMode
+  setTheme: (theme: ThemeMode) => void
   toggleTheme: () => void
 }
 
@@ -13,34 +12,30 @@ export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
       theme: 'dark',
-      setTheme: (theme) => {
+      setTheme: (theme: ThemeMode) => {
         set({ theme })
         applyTheme(theme)
       },
       toggleTheme: () => {
-        const nextTheme = get().theme === 'dark' ? 'light' : 'dark'
+        const nextTheme: ThemeMode = get().theme === 'dark' ? 'light' : 'dark'
         set({ theme: nextTheme })
         applyTheme(nextTheme)
       },
     }),
     {
-      name: 'ragvault-theme',
+      name: 'ragvault-theme-preference',
       onRehydrateStorage: () => (state) => {
         if (state) {
           applyTheme(state.theme)
+        } else {
+          applyTheme('dark')
         }
       },
     }
   )
 )
 
-export function applyTheme(theme: Theme) {
-  const root = document.documentElement
-  if (theme === 'light') {
-    root.classList.add('light')
-    root.classList.remove('dark')
-  } else {
-    root.classList.add('dark')
-    root.classList.remove('light')
-  }
+export function initTheme() {
+  const currentTheme = useThemeStore.getState().theme || 'dark'
+  applyTheme(currentTheme)
 }

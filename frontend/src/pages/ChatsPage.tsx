@@ -39,8 +39,8 @@ export function ChatsPage() {
         animate={{ opacity: 1, scale: 1 }}
         className="text-center max-w-md px-6"
       >
-        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-purple-500/20 to-indigo-600/20 border border-purple-500/30 flex items-center justify-center mx-auto mb-6 animate-glow">
-          <Brain className="w-10 h-10 text-purple-400" />
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary/20 to-blue-600/20 border border-primary/30 flex items-center justify-center mx-auto mb-6 animate-glow">
+          <Brain className="w-10 h-10 text-primary" />
         </div>
         <h1 className="text-3xl font-bold gradient-text mb-3">Welcome to RagVault</h1>
         <p className="text-muted-foreground mb-8 text-sm leading-relaxed">
@@ -57,7 +57,7 @@ export function ChatsPage() {
             {createChat.isPending ? 'Creating…' : 'Create Knowledge Space'}
           </Button>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
             100% offline · no data leaves your device
           </div>
         </div>

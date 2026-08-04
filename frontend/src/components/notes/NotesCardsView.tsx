@@ -43,7 +43,7 @@ export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCar
       <div className="px-6 py-4 border-b border-white/10 glass-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 flex-shrink-0">
         <div>
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-400" />
+            <Sparkles className="w-4 h-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">{notes.title}</h2>
             <Badge variant="secondary" className="text-[10px]">
               {notes.cards.length} cards
@@ -60,9 +60,9 @@ export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCar
           variant="outline"
           onClick={onRegenerate}
           disabled={isRegenerating}
-          className="h-8 text-xs rounded-full border-2 border-purple-500/50 hover:border-purple-400 px-4 bg-purple-500/10 hover:bg-purple-500/20 text-foreground transition-all shadow-sm"
+          className="h-8 text-xs rounded-full border-2 border-primary/50 hover:border-primary px-4 bg-primary/10 hover:bg-primary/20 text-foreground transition-all shadow-sm"
         >
-          <RotateCw className={`w-3.5 h-3.5 mr-1.5 text-purple-400 ${isRegenerating ? 'animate-spin' : ''}`} />
+          <RotateCw className={`w-3.5 h-3.5 mr-1.5 text-primary ${isRegenerating ? 'animate-spin' : ''}`} />
           {isRegenerating ? 'Generating...' : 'Regenerate Notes'}
         </Button>
       </div>
@@ -100,7 +100,7 @@ export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCar
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="glass-card rounded-2xl p-5 border border-white/10 hover:border-purple-500/40 transition-all flex flex-col justify-between group shadow-lg"
+                    className="glass-card rounded-2xl p-5 border border-white/10 hover:border-primary/40 transition-all flex flex-col justify-between group shadow-lg"
                   >
                     <div>
                       {/* Top Bar with Copy Button */}
@@ -113,7 +113,7 @@ export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCar
                           onClick={() => handleCopyCard(card)}
                           title="Copy card"
                         >
-                          {copiedId === card.id ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copiedId === card.id ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                         </Button>
                       </div>
 
@@ -127,7 +127,7 @@ export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCar
                         <ul className="space-y-1">
                           {card.key_points.map((point, idx) => (
                             <li key={idx} className="text-xs text-foreground/90 flex items-start gap-2 leading-normal">
-                              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 mt-1.5 flex-shrink-0" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
                               <span>{point}</span>
                             </li>
                           ))}
@@ -138,7 +138,7 @@ export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCar
                     {/* Footer Citation */}
                     <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[10px] text-muted-foreground">
                       <span className="flex items-center gap-1 truncate max-w-[80%]" title={card.source}>
-                        <FileText className="w-3 h-3 text-purple-400 flex-shrink-0" />
+                        <FileText className="w-3 h-3 text-primary flex-shrink-0" />
                         <span className="truncate">{card.source}</span>
                       </span>
                       <span>Page {card.page ?? 1}</span>

@@ -41,7 +41,7 @@ services:
 
   # ── ChromaDB ───────────────────────────────────────────────────────────────
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.5.18
     container_name: hub_chromadb
     restart: unless-stopped
     networks:
