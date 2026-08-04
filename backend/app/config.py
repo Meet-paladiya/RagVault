@@ -4,17 +4,15 @@ All values can be overridden via .env file or environment variables.
 """
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve the project root .env (two levels up from this file: app/ -> backend/ -> project root)
-_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
-
+_DEFAULT_DB_URL = "postgresql+asyncpg://knowledge_user:changeme_strong_password@postgres:5432/knowledge_hub"
 
 class Settings(BaseSettings):
     # ── PostgreSQL ────────────────────────────────────────────────────────────
-    database_url: str = (
-        "postgresql+asyncpg://knowledge_user:changeme_strong_password@localhost:5432/knowledge_hub"
-    )
+    database_url: str = _DEFAULT_DB_URL
 
     # ── JWT Auth ──────────────────────────────────────────────────────────────
     jwt_secret: str = "change_this_to_a_long_random_secret_key_at_least_32_chars"
@@ -24,7 +22,7 @@ class Settings(BaseSettings):
 
     # ── Ollama (Local LLM) ───────────────────────────────────────────────────
     ollama_base_url: str = "http://ollama:11434"
-    ollama_model: str = "qwen2.5:7b-instruct"
+    ollama_model: str = "qwen2.5:1.5b-instruct"
 
     # ── Embeddings ───────────────────────────────────────────────────────────
     embedding_model: str = "BAAI/bge-base-en-v1.5"
@@ -33,10 +31,10 @@ class Settings(BaseSettings):
     # ── ChromaDB ─────────────────────────────────────────────────────────────
     chroma_host: str = "chromadb"
     chroma_port: int = 8000
-    chroma_persist_dir: str = str(Path(__file__).resolve().parents[1] / "chroma_data")
+    chroma_persist_dir: str = "/chroma_data"
 
     # ── File Storage ──────────────────────────────────────────────────────────
-    upload_temp_dir: str = str(Path(__file__).resolve().parents[1] / "uploads" / "temp")
+    upload_temp_dir: str = "/uploads/temp"
 
     # ── RAG / Chunking ────────────────────────────────────────────────────────
     chunk_size: int = 600
@@ -52,10 +50,17 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ── HuggingFace Cache ─────────────────────────────────────────────────────
-    hf_home: str = str(Path.home() / ".cache" / "huggingface")
+    hf_home: str = "/hf_cache"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def validate_database_url(cls, v: Any) -> str:
+        if not v or not str(v).strip():
+            return _DEFAULT_DB_URL
+        return str(v)
 
     model_config = SettingsConfigDict(
-        env_file=str(_ENV_FILE),
+        env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )

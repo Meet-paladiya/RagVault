@@ -97,10 +97,11 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://knowledge_user:changeme_strong_password@postgres:5432/knowledge_hub}
+      - DATABASE_URL=${postgresql+asyncpg://knowledge_user:pg_sec_9d3f82a7b1c4e650@localhost:5432/knowledge_hub}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b-instruct}
       - HF_HOME=/hf_cache
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
     volumes:
