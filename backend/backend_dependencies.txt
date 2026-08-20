@@ -1,0 +1,186 @@
+================================================================================
+RAGVAULT BACKEND DEPENDENCIES & USE CASES (100% OFFLINE WEB APPLICATION)
+================================================================================
+
+This document lists all backend dependencies used in RagVault, categorized by 
+subsystem, along with their specific use cases and offline role.
+
+--------------------------------------------------------------------------------
+1. WEB FRAMEWORK & SERVER
+--------------------------------------------------------------------------------
+
+• fastapi (0.115.0)
+  - Use Case: Core backend web framework.
+  - Role: Provides high-performance asynchronous REST API routing, request 
+    validation, dependency injection, middleware support, and Server-Sent 
+    Events (SSE) for streaming LLM responses to the frontend.
+
+• uvicorn[standard] (0.30.6)
+  - Use Case: Lightning-fast ASGI web server.
+  - Role: Runs and serves the FastAPI application asynchronously, handling 
+    concurrent client connections, HTTP/1.1, and SSE streaming with uvloop 
+    and httptools.
+
+• pydantic[email] (2.9.2)
+  - Use Case: Data validation and serialization.
+  - Role: Enforces strict data models and schemas for API request payloads 
+    and response objects. Validates email formats for user accounts.
+
+• pydantic-settings (2.5.2)
+  - Use Case: Application configuration management.
+  - Role: Parses and validates environment variables from `.env` files into 
+    strongly-typed Python settings objects (database URLs, JWT secrets, paths).
+
+• python-multipart (0.0.12)
+  - Use Case: Form and file upload streaming parser.
+  - Role: Enables FastAPI to receive multipart form data when users upload 
+    documents (PDF, PPTX) and media files (audio/video).
+
+• aiofiles (24.1.0)
+  - Use Case: Asynchronous file filesystem operations.
+  - Role: Handles saving, reading, and streaming uploaded files to local disk 
+    storage without blocking the async event loop.
+
+
+--------------------------------------------------------------------------------
+2. DATABASE & ORM
+--------------------------------------------------------------------------------
+
+• sqlalchemy (2.0.35)
+  - Use Case: SQL toolkit and Object Relational Mapper (ORM).
+  - Role: Defines database models (users, spaces, documents, chat messages, 
+    quizzes, notes) and executes asynchronous relational queries.
+
+• asyncpg (0.30.0)
+  - Use Case: Asynchronous PostgreSQL client library.
+  - Role: High-performance async driver used by SQLAlchemy to connect to the 
+    local PostgreSQL container or database instance.
+
+• alembic (1.13.3)
+  - Use Case: Database schema migration management.
+  - Role: Tracks database schema versioning, generates auto-migrations, and 
+    safely applies schema updates locally without losing stored data.
+
+
+--------------------------------------------------------------------------------
+3. AUTHENTICATION & SECURITY
+--------------------------------------------------------------------------------
+
+• passlib[bcrypt] (1.7.4)
+  - Use Case: Password hashing and verification.
+  - Role: Uses the bcrypt hashing algorithm with cryptographic salt to safely 
+    hash and verify user passwords completely offline.
+
+• python-jose[cryptography] (3.3.0)
+  - Use Case: JSON Web Token (JWT) encoding and decoding.
+  - Role: Issues and verifies signed JWT access tokens for stateless, secure 
+    user authentication and role authorization.
+
+
+--------------------------------------------------------------------------------
+4. LOCAL LLM INVOCATION & ORCHESTRATION (OFFLINE AI)
+--------------------------------------------------------------------------------
+
+• httpx (0.27.2)
+  - Use Case: Asynchronous HTTP client.
+  - Role: Communicates directly with the local Ollama daemon (http://ollama:11434 
+    or http://localhost:11434) to trigger offline LLM inference (Qwen 2.5, 
+    Llama 3.1, Mistral, etc.) and stream tokens back.
+
+• langchain-community (0.3.7)
+  - Use Case: AI component integrations and utilities.
+  - Role: Provides local document loaders, prompt templates, text splitters, 
+    and integration helpers for local LLMs and vector stores.
+
+• langgraph (0.2.45)
+  - Use Case: Stateful multi-step AI workflow & agent orchestration.
+  - Role: Coordinates complex RAG workflows, query transformation, citation 
+    linking, quiz generation cycles, and study plan recommendation graphs.
+
+
+--------------------------------------------------------------------------------
+5. VECTOR DATABASE & LOCAL EMBEDDINGS (OFFLINE RAG)
+--------------------------------------------------------------------------------
+
+• chromadb (0.5.18)
+  - Use Case: Local vector database.
+  - Role: Stores high-dimensional document chunk embeddings, metadata, and 
+    performs fast approximate nearest-neighbor (ANN) similarity search offline.
+
+• sentence-transformers (3.3.1)
+  - Use Case: Local sentence and text embedding generation.
+  - Role: Runs dense embedding models (e.g., BAAI/bge-small-en-v1.5 or 
+    all-MiniLM-L6-v2) on local CPU/GPU to convert text chunks into vector 
+    embeddings without external cloud APIs.
+
+• tiktoken (0.8.0)
+  - Use Case: Fast Byte-Pair Encoding (BPE) tokenization.
+  - Role: Accurately counts tokens and splits long text into chunk sizes 
+    matching the context window limits of local models.
+
+• numpy (1.26.4)
+  - Use Case: Numerical array computing.
+  - Role: Handles vector manipulations, cosine similarity calculations, and 
+    array transformations for embeddings and retrieval ranking.
+
+
+--------------------------------------------------------------------------------
+6. OFFLINE DOCUMENT & MEDIA PARSERS
+--------------------------------------------------------------------------------
+
+• PyMuPDF (1.24.13) [imported as `fitz`]
+  - Use Case: High-speed PDF text and structure extraction.
+  - Role: Parses PDF files locally to extract text, page numbers, layouts, 
+    and metadata for document chunking.
+
+• python-pptx (1.0.2)
+  - Use Case: PowerPoint (.pptx) file parsing.
+  - Role: Extracts slide titles, bullet points, table text, and speaker notes 
+    from presentation files locally.
+
+• faster-whisper (1.1.0)
+  - Use Case: Local offline speech-to-text transcription.
+  - Role: Uses CTranslate2-accelerated Whisper models (tiny/base/small/medium) 
+    to transcribe audio and video files locally with high speed and low memory.
+
+
+--------------------------------------------------------------------------------
+7. UTILITIES & ENVIRONMENT
+--------------------------------------------------------------------------------
+
+• python-dotenv (1.0.1)
+  - Use Case: Environment configuration loader.
+  - Role: Automatically reads key-value pairs from `.env` files into 
+    os.environ for runtime configuration.
+
+• rich (13.9.4)
+  - Use Case: Rich terminal formatting and logging.
+  - Role: Pretty-prints structured logs, startup banners, error traces, and 
+    status tables to the backend terminal console.
+
+
+--------------------------------------------------------------------------------
+8. DEVELOPMENT & TESTING DEPENDENCIES (requirements-dev.txt)
+--------------------------------------------------------------------------------
+
+• pytest (8.3.3)
+  - Use Case: Python testing framework.
+  - Role: Discovers and executes automated unit, service, and integration tests.
+
+• pytest-asyncio (0.24.0)
+  - Use Case: Async testing support for Pytest.
+  - Role: Allows testing async FastAPI route handlers, database queries, and 
+    async RAG pipelines.
+
+• aiosqlite (0.20.0)
+  - Use Case: Asynchronous SQLite driver.
+  - Role: Provides lightweight, in-memory or file-based SQL database engine 
+    for fast isolated test suites without requiring a running PostgreSQL server.
+
+================================================================================
+OFFLINE COMPLIANCE SUMMARY:
+- Zero external SaaS/Cloud API dependencies (no OpenAI/Gemini/Anthropic keys).
+- All AI processing (LLM, Embeddings, STT) executes locally via Ollama, 
+  SentenceTransformers, and Faster-Whisper.
+- All persistent data stays inside local PostgreSQL, ChromaDB, and local storage.
+================================================================================
