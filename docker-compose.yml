@@ -97,7 +97,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=${postgresql+asyncpg://knowledge_user:pg_sec_9d3f82a7b1c4e650@localhost:5432/knowledge_hub}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://knowledge_user:pg_sec_9d3f82a7b1c4e650@postgres:5432/knowledge_hub}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - OLLAMA_BASE_URL=http://ollama:11434
