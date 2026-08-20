@@ -3,7 +3,7 @@ Chats router: CRUD for knowledge spaces + clear-knowledge action.
 All routes require authentication. Ownership is verified on every operation.
 """
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -18,9 +18,14 @@ from app.utils.chroma_client import delete_collection
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
 
+def _to_uuid(val: str | UUID) -> UUID:
+    return UUID(str(val)) if not isinstance(val, UUID) else val
+
+
 async def _get_owned_chat(chat_id: str, user: User, db: AsyncSession) -> Chat:
     """Helper: fetch a chat by ID and verify it belongs to the current user."""
-    result = await db.execute(select(Chat).where(Chat.id == chat_id))
+    cid = _to_uuid(chat_id)
+    result = await db.execute(select(Chat).where(Chat.id == cid))
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found.")
@@ -68,7 +73,7 @@ async def get_chat(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
-    """Get a single knowledge space by ID."""
+    """Retrieve details for a single knowledge space."""
     chat = await _get_owned_chat(chat_id, current_user, db)
     return ChatResponse.model_validate(chat)
 
@@ -79,24 +84,19 @@ async def delete_chat(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete a chat and all its associated ChromaDB vectors."""
+    """Delete a knowledge space and its associated ChromaDB collection."""
     chat = await _get_owned_chat(chat_id, current_user, db)
-    delete_collection(chat_id)  # wipe vectors
+    delete_collection(chat_id)
     await db.delete(chat)
     await db.commit()
 
 
-@router.post("/{chat_id}/clear-knowledge", status_code=status.HTTP_200_OK)
+@router.delete("/{chat_id}/clear-knowledge", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_knowledge(
     chat_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
-    """
-    Explicitly wipe all ChromaDB vectors for this chat.
-    Documents metadata in PostgreSQL is preserved.
-    This is a destructive action — the user must confirm in the UI.
-    """
+) -> None:
+    """Clear all vector embeddings and documents for a knowledge space without deleting the chat."""
     await _get_owned_chat(chat_id, current_user, db)
     delete_collection(chat_id)
-    return {"message": "Knowledge cleared. All vector embeddings have been deleted.", "chat_id": chat_id}

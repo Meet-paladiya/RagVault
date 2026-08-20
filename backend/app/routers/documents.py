@@ -25,8 +25,13 @@ router = APIRouter(prefix="/chats", tags=["Documents"])
 MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
 
 
+def _to_uuid(val: str | UUID) -> UUID:
+    return UUID(str(val)) if not isinstance(val, UUID) else val
+
+
 async def _verify_chat_ownership(chat_id: str, user: User, db: AsyncSession) -> Chat:
-    result = await db.execute(select(Chat).where(Chat.id == chat_id))
+    cid = _to_uuid(chat_id)
+    result = await db.execute(select(Chat).where(Chat.id == cid))
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found.")
@@ -82,18 +87,19 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentResponse:
     """
-    Upload a document to a knowledge space.
-    Accepted: PDF, PPTX, MP4/MKV/MOV/AVI/WEBM, MP3/WAV/M4A/OGG/FLAC/AAC.
-    Rejected: DOCX, images, and all other types.
+    Upload and ingest a document into a knowledge space.
 
-    Returns 202 immediately; ingestion runs in the background.
-    Poll GET /chats/{chat_id}/documents to check status.
+    - Validates file type (rejects DOCX, images, etc. with 422).
+    - Streams file to temporary storage.
+    - Creates Document record in 'processing' status.
+    - Dispatches ingestion pipeline as a background task.
+    - Returns 202 Accepted immediately with the Document record.
     """
     await _verify_chat_ownership(chat_id, current_user, db)
 
-    filename = file.filename or "upload"
+    # Validate file extension
     try:
-        _validate_extension(filename)
+        ext = _validate_extension(file.filename or "")
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -101,43 +107,49 @@ async def upload_document(
         )
 
     from app.config import get_settings
-
     cfg = get_settings()
 
     # Save to temp directory
-    temp_dir = os.path.join(cfg.upload_temp_dir, chat_id)
-    os.makedirs(temp_dir, exist_ok=True)
-    file_path = os.path.join(temp_dir, filename)
+    doc_id = uuid4()
+    temp_filename = f"{doc_id}{ext}"
+    temp_path = os.path.join(cfg.upload_temp_dir, temp_filename)
 
-    async with aiofiles.open(file_path, "wb") as f:
-        content = await file.read()
-        await f.write(content)
+    file_size = 0
+    async with aiofiles.open(temp_path, "wb") as out_file:
+        while content := await file.read(1024 * 1024):  # 1MB chunks
+            file_size += len(content)
+            if file_size > MAX_FILE_SIZE:
+                os.unlink(temp_path)
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="File size exceeds maximum allowed limit (2GB).",
+                )
+            await out_file.write(content)
 
-    ext = os.path.splitext(filename)[1].lower()
-    document_id = uuid4()  # UUID object — matches UUID(as_uuid=True) column
-
-    # Create document record with status='processing'
+    cid = _to_uuid(chat_id)
+    # Create Document record in DB
     doc = Document(
-        id=document_id,
-        chat_id=UUID(chat_id),
-        filename=filename,
-        file_type=ext,
-        chroma_collection=f"chat_{chat_id.replace('-', '_')}",
+        id=doc_id,
+        chat_id=cid,
+        filename=file.filename,
+        file_type=ext.lstrip("."),
+        file_size=file_size,
         status="processing",
+        total_pages=0,
+        total_chunks=0,
     )
     db.add(doc)
     await db.commit()
     await db.refresh(doc)
 
-    # Kick off background ingestion
-    from app.config import get_settings as gs
+    # Launch background ingestion
     background_tasks.add_task(
         _background_ingest,
         chat_id=chat_id,
-        file_path=file_path,
-        filename=filename,
-        document_id=str(document_id),  # convert back to str for ingest pipeline
-        db_url=gs().database_url,
+        file_path=temp_path,
+        filename=file.filename,
+        document_id=str(doc_id),
+        db_url=cfg.database_url,
     )
 
     return DocumentResponse.model_validate(doc)
@@ -151,8 +163,9 @@ async def list_documents(
 ) -> DocumentListResponse:
     """List all documents in a knowledge space with their processing status."""
     await _verify_chat_ownership(chat_id, current_user, db)
+    cid = _to_uuid(chat_id)
     result = await db.execute(
-        select(Document).where(Document.chat_id == chat_id).order_by(Document.upload_time.desc())
+        select(Document).where(Document.chat_id == cid).order_by(Document.upload_time.desc())
     )
     docs = result.scalars().all()
     return DocumentListResponse(documents=[DocumentResponse.model_validate(d) for d in docs])
@@ -167,9 +180,11 @@ async def delete_document(
 ) -> None:
     """Delete a document and remove its chunks from ChromaDB."""
     await _verify_chat_ownership(chat_id, current_user, db)
+    cid = _to_uuid(chat_id)
+    doc_uuid = _to_uuid(doc_id)
 
     result = await db.execute(
-        select(Document).where(Document.id == doc_id, Document.chat_id == chat_id)
+        select(Document).where(Document.id == doc_uuid, Document.chat_id == cid)
     )
     doc = result.scalar_one_or_none()
     if not doc:

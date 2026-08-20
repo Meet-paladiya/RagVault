@@ -5,8 +5,7 @@ GET  /chats/{chat_id}/messages  → full message history
 """
 import json
 import logging
-from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -24,8 +23,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chats", tags=["Messages"])
 
 
+def _to_uuid(val: str | UUID) -> UUID:
+    """Helper to convert string or UUID to UUID object safely."""
+    return UUID(str(val)) if not isinstance(val, UUID) else val
+
+
 async def _verify_chat_ownership(chat_id: str, user: User, db: AsyncSession) -> Chat:
-    result = await db.execute(select(Chat).where(Chat.id == chat_id))
+    cid = _to_uuid(chat_id)
+    result = await db.execute(select(Chat).where(Chat.id == cid))
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found.")
@@ -35,9 +40,10 @@ async def _verify_chat_ownership(chat_id: str, user: User, db: AsyncSession) -> 
 
 
 async def _load_chat_history(chat_id: str, db: AsyncSession, limit: int = 12) -> list[dict]:
+    cid = _to_uuid(chat_id)
     result = await db.execute(
         select(Message)
-        .where(Message.chat_id == chat_id)
+        .where(Message.chat_id == cid)
         .order_by(Message.created_at.desc())
         .limit(limit)
     )
@@ -55,18 +61,19 @@ async def _save_messages(
     """Persist user question and assistant answer to PostgreSQL using a fresh DB session."""
     from app.database import AsyncSessionLocal
 
+    cid = _to_uuid(chat_id)
     async with AsyncSessionLocal() as session:
         try:
             user_msg = Message(
                 id=uuid4(),
-                chat_id=chat_id,
+                chat_id=cid,
                 role="user",
                 content=user_content,
                 citations=None,
             )
             assistant_msg = Message(
                 id=uuid4(),
-                chat_id=chat_id,
+                chat_id=cid,
                 role="assistant",
                 content=assistant_content,
                 citations=citations,
@@ -74,6 +81,7 @@ async def _save_messages(
             session.add(user_msg)
             session.add(assistant_msg)
             await session.commit()
+            logger.info("[MESSAGES] Saved user and assistant messages to DB for chat %s", chat_id)
         except Exception as exc:
             logger.error("[MESSAGES] Failed to save messages to DB: %s", exc)
 
@@ -92,9 +100,9 @@ async def send_message(
     If stream=False: waits for full answer and returns a MessageResponse JSON.
 
     SSE format:
-      data: <token>\\n\\n     → partial answer token
-      data: __citations__:<json>\\n\\n  → citation metadata
-      data: [DONE]\\n\\n      → stream end
+      data: {"token": "..."}\\n\\n        → partial answer token
+      data: {"citations": [...]}\\n\\n    → citation metadata
+      data: [DONE]\\n\\n                 → stream end
     """
     await _verify_chat_ownership(chat_id, current_user, db)
     chat_history = await _load_chat_history(chat_id, db)
@@ -106,21 +114,33 @@ async def send_message(
             citations: list[dict] = []
 
             async for chunk in stream_rag(payload.content, chat_id, chat_history):
-                if chunk.startswith("data: __citations__:"):
-                    raw = chunk.removeprefix("data: __citations__:").strip()
-                    try:
-                        citations = json.loads(raw)
-                    except json.JSONDecodeError:
-                        citations = []
-                elif chunk == "data: [DONE]\n\n":
+                if chunk == "data: [DONE]\n\n":
                     # Guarantee DB commit completes BEFORE sending [DONE] signal to frontend
                     full_answer = "".join(full_answer_parts)
                     if full_answer:
                         await _save_messages(chat_id, payload.content, full_answer, citations)
                     yield "data: [DONE]\n\n"
+                elif chunk.startswith("data: "):
+                    raw_data = chunk.removeprefix("data: ").strip()
+                    try:
+                        parsed = json.loads(raw_data)
+                        if isinstance(parsed, dict):
+                            if "token" in parsed:
+                                full_answer_parts.append(str(parsed["token"]))
+                            elif "citations" in parsed:
+                                citations = parsed["citations"]
+                        else:
+                            full_answer_parts.append(str(parsed))
+                    except json.JSONDecodeError:
+                        if raw_data.startswith("__citations__:"):
+                            try:
+                                citations = json.loads(raw_data.removeprefix("__citations__:").strip())
+                            except Exception:
+                                pass
+                        elif raw_data:
+                            full_answer_parts.append(raw_data)
+                    yield chunk
                 else:
-                    token = chunk.removeprefix("data: ").rstrip("\n")
-                    full_answer_parts.append(token)
                     yield chunk
 
         return StreamingResponse(
@@ -128,6 +148,7 @@ async def send_message(
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
             },
         )
@@ -138,9 +159,10 @@ async def send_message(
             chat_id, payload.content, result["answer"], result["citations"]
         )
         # Return the assistant message
+        cid = _to_uuid(chat_id)
         db_result = await db.execute(
             select(Message)
-            .where(Message.chat_id == chat_id, Message.role == "assistant")
+            .where(Message.chat_id == cid, Message.role == "assistant")
             .order_by(Message.created_at.desc())
             .limit(1)
         )
@@ -156,9 +178,10 @@ async def get_messages(
 ) -> MessageListResponse:
     """Retrieve the full message history for a knowledge space."""
     await _verify_chat_ownership(chat_id, current_user, db)
+    cid = _to_uuid(chat_id)
     result = await db.execute(
         select(Message)
-        .where(Message.chat_id == chat_id)
+        .where(Message.chat_id == cid)
         .order_by(Message.created_at.asc())
     )
     msgs = result.scalars().all()

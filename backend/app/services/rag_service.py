@@ -257,14 +257,14 @@ Cite sources as [Source: <filename>, Page: <N>].
     try:
         async for chunk in llm.astream(prompt):
             if chunk:
-                yield f"data: {chunk}\n\n"
+                yield f"data: {json.dumps({'token': str(chunk)})}\n\n"
     except Exception as exc:
         logger.error("[RAG:stream] LLM streaming error: %s", exc)
         err_msg = (
-            f"\n\n⚠️ **LLM Model Not Found**: Ollama model `{cfg.ollama_model}` is not pulled yet.\n"
-            f"Please run `ollama pull {cfg.ollama_model}` in your terminal."
+            f"⚠️ **LLM Model Error**: Failed to stream from Ollama model `{cfg.ollama_model}`.\n"
+            f"Please ensure Ollama is running and run `ollama pull {cfg.ollama_model}`."
         )
-        yield f"data: {err_msg}\n\n"
+        yield f"data: {json.dumps({'token': err_msg})}\n\n"
 
     # ── Step 5: Emit deduplicated citations as metadata event ─────────────────
     seen: set[tuple[str, int]] = set()
@@ -275,5 +275,5 @@ Cite sources as [Source: <filename>, Page: <N>].
             seen.add(key)
             citations.append({"source": chunk["source"], "page": chunk["page"]})
 
-    yield f"data: __citations__:{json.dumps(citations)}\n\n"
+    yield f"data: {json.dumps({'citations': citations})}\n\n"
     yield "data: [DONE]\n\n"

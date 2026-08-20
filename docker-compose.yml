@@ -69,14 +69,6 @@ services:
       - OLLAMA_HOST=0.0.0.0
     ports:
       - "11434:11434"
-    # ── GPU support (NVIDIA) — uncomment if GPU available ──
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
     # ── Backend (FastAPI) ──────────────────────────────────────────────────────
   backend:

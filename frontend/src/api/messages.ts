@@ -17,8 +17,8 @@ export const useMessages = (chatId?: string) => {
 /**
  * Stream a RAG response via SSE.
  * The backend returns:
- *   data: <token>              → partial answer token (plain text)
- *   data: __citations__:<json> → citation metadata
+ *   data: {"token": "..."}      → partial answer token (JSON encoded)
+ *   data: {"citations": [...]}  → citation metadata
  *   data: [DONE]               → stream complete
  *
  * The backend POST endpoint is /chats/{chatId}/messages with stream=true.
@@ -74,22 +74,35 @@ export const streamMessage = async (
           return
         }
 
-        if (!line.startsWith('data: ')) continue
-        const data = line.slice(6)
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data: ')) continue
+        const raw = trimmed.slice(6).trim()
 
-        if (data === '[DONE]') {
+        if (raw === '[DONE]') {
           await reader.cancel()
           onDone()
           return
         }
 
-        if (data.startsWith('__citations__:')) {
-          // Citations metadata — ignored at streaming level, persisted by backend
-          continue
+        // Try parsing JSON payload ({"token": "..."})
+        try {
+          const parsed = JSON.parse(raw)
+          if (typeof parsed === 'object' && parsed !== null) {
+            if ('token' in parsed && typeof parsed.token === 'string') {
+              onToken(parsed.token)
+              continue
+            }
+            if ('citations' in parsed) {
+              // Citations metadata event
+              continue
+            }
+          }
+        } catch {
+          // Fallback for plain text stream chunks
+          if (raw && !raw.startsWith('__citations__:')) {
+            onToken(raw)
+          }
         }
-
-        // Plain token text
-        if (data) onToken(data)
       }
     }
 

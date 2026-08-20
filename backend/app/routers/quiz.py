@@ -3,6 +3,7 @@ Quiz router: generation, submission, history, and recommendations.
 """
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, desc
@@ -25,8 +26,14 @@ from app.services.recommendation_service import get_recommendations
 router = APIRouter(tags=["Quiz"])
 
 
+def _to_uuid(val: str | UUID) -> UUID:
+    """Helper to convert string or UUID to UUID object safely."""
+    return UUID(str(val)) if not isinstance(val, UUID) else val
+
+
 async def _verify_chat_ownership(chat_id: str, user: User, db: AsyncSession) -> Chat:
-    result = await db.execute(select(Chat).where(Chat.id == chat_id))
+    cid = _to_uuid(chat_id)
+    result = await db.execute(select(Chat).where(Chat.id == cid))
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found.")
@@ -73,9 +80,10 @@ async def get_quiz_history(
 ) -> list[QuizResponse]:
     """Return all quizzes taken in a knowledge space, most recent first."""
     await _verify_chat_ownership(chat_id, current_user, db)
+    cid = _to_uuid(chat_id)
     result = await db.execute(
         select(Quiz)
-        .where(Quiz.chat_id == chat_id)
+        .where(Quiz.chat_id == cid)
         .order_by(desc(Quiz.created_at))
     )
     quizzes = result.scalars().all()

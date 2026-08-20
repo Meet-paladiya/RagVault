@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from langchain_community.llms import Ollama
@@ -155,8 +155,9 @@ async def generate_notes(db: AsyncSession, chat_id: str) -> Note:
     from app.config import get_settings
     cfg = get_settings()
 
+    cid = UUID(str(chat_id)) if not isinstance(chat_id, UUID) else chat_id
     # Load chat title
-    chat_res = await db.execute(select(Chat).where(Chat.id == chat_id))
+    chat_res = await db.execute(select(Chat).where(Chat.id == cid))
     chat = chat_res.scalar_one_or_none()
     chat_title = chat.title if chat else "Knowledge Space"
 
@@ -206,7 +207,7 @@ async def generate_notes(db: AsyncSession, chat_id: str) -> Note:
     # Save to DB
     note = Note(
         id=uuid4(),
-        chat_id=chat_id,
+        chat_id=cid,
         title=f"AI Notes: {chat_title}",
         cards=all_cards,
     )
@@ -218,11 +219,12 @@ async def generate_notes(db: AsyncSession, chat_id: str) -> Note:
     return note
 
 
-async def get_latest_notes(db: AsyncSession, chat_id: str) -> Note | None:
+async def get_latest_notes(db: AsyncSession, chat_id: str | UUID) -> Note | None:
     """Retrieve the most recent generated notes for a chat."""
+    cid = UUID(str(chat_id)) if not isinstance(chat_id, UUID) else chat_id
     result = await db.execute(
         select(Note)
-        .where(Note.chat_id == chat_id)
+        .where(Note.chat_id == cid)
         .order_by(desc(Note.created_at))
         .limit(1)
     )
