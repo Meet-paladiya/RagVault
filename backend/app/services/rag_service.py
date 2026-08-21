@@ -19,6 +19,12 @@ from app.utils.embedder import embed_single
 
 logger = logging.getLogger(__name__)
 
+NO_DOCS_MESSAGE = (
+    "📄 **No relevant documents found in this Knowledge Space.**\n\n"
+    "Please upload documents (PDF, PPTX, Video, or Audio) to this space using the sidebar. "
+    "Once uploaded, I will answer your questions strictly using the information in your documents."
+)
+
 
 # ─── LangGraph State ──────────────────────────────────────────────────────────
 
@@ -65,42 +71,49 @@ def assemble_context_node(state: RAGState) -> RAGState:
         parts.append(
             f"[{i}] Source: {chunk['source']} | Page: {chunk['page']}\n{chunk['text']}"
         )
-    state["context"] = "\n\n---\n\n".join(parts) if parts else "No relevant context found."
+    state["context"] = "\n\n---\n\n".join(parts) if parts else ""
     return state
 
 
 def _build_prompt(state: RAGState) -> str:
-    """Construct the full prompt for the LLM."""
+    """Construct the strict document-grounded prompt for the LLM."""
     history_lines: list[str] = []
     for msg in state["chat_history"][-6:]:  # last 3 turns
         role = "User" if msg["role"] == "user" else "Assistant"
         history_lines.append(f"{role}: {msg['content']}")
     history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
 
-    return f"""You are a knowledgeable AI tutor. Your task is to answer the student's question
-based ONLY on the provided context. Do not use information outside of the context.
-If the answer cannot be found in the context, say so clearly.
+    return f"""You are RagVault, an expert document-grounded AI assistant.
+Your task is to provide comprehensive, accurate, and direct answers to questions based ONLY on the provided context excerpts from uploaded documents.
 
-When referencing information, cite the source using this format: [Source: <filename>, Page: <N>]
+GUIDELINES:
+1. Ground your answer thoroughly in the facts, details, and explanations provided in the CONTEXT below.
+2. Structure your response clearly using Markdown (bullet points, bold text, headings, or numbered steps where appropriate).
+3. When presenting specific facts, reference the source like [Source: <filename>, Page: <page>].
+4. If the provided context does not contain enough information to answer the question, clearly state: "I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
 
-=== CONTEXT ===
+=== CONTEXT FROM UPLOADED DOCUMENTS ===
 {state['context']}
 
 === CONVERSATION HISTORY ===
 {history_block}
 
-=== STUDENT QUESTION ===
+=== USER QUESTION ===
 {state['question']}
 
-=== YOUR ANSWER ==="""
+=== GROUNDED RESPONSE ==="""
 
 
 def generate_answer_node(state: RAGState) -> RAGState:
     """Node 4: Call Ollama LLM with the assembled prompt (non-streaming path)."""
     from app.config import get_settings
 
+    if not state.get("retrieved_chunks") or not state.get("context"):
+        state["answer"] = NO_DOCS_MESSAGE
+        return state
+
     cfg = get_settings()
-    llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model)
+    llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model, temperature=0.0)
 
     prompt = _build_prompt(state)
     try:
@@ -110,7 +123,7 @@ def generate_answer_node(state: RAGState) -> RAGState:
         logger.error("[RAG] LLM generation error: %s", exc)
         state["answer"] = (
             f"⚠️ **LLM Error**: Could not generate response using Ollama model `{cfg.ollama_model}`.\n"
-            f"Please run `ollama pull {cfg.ollama_model}` in your terminal."
+            f"Please ensure Ollama is running and run `ollama pull {cfg.ollama_model}`."
         )
     return state
 
@@ -120,6 +133,10 @@ def extract_citations_node(state: RAGState) -> RAGState:
     Node 5: Build a deduplicated citation list from the retrieved chunk metadata.
     Citations are derived from metadata, NOT from LLM hallucination.
     """
+    if not state.get("retrieved_chunks"):
+        state["citations"] = []
+        return state
+
     seen: set[tuple[str, int]] = set()
     citations: list[dict[str, Any]] = []
     for chunk in state["retrieved_chunks"]:
@@ -200,19 +217,17 @@ async def stream_rag(
     """
     Stream the RAG answer token-by-token as SSE events.
 
-    Yields lines in the format:
-        data: <token>\\n\\n
+    Yields lines in JSON format:
+        data: {"token": "..."}\\n\\n
     Terminates with:
+        data: {"citations": [...]}\\n\\n
         data: [DONE]\\n\\n
-
-    The citations JSON is sent as a final metadata event before [DONE]:
-        data: __citations__:<json>\\n\\n
     """
     from app.config import get_settings
 
     cfg = get_settings()
 
-    # ── Steps 1-3: embed → retrieve → assemble context (run synchronously) ───
+    # ── Steps 1-2: embed → retrieve ───
     query_embedding = embed_single(question)
     retrieved_chunks = query_collection(
         chat_id=chat_id,
@@ -220,13 +235,20 @@ async def stream_rag(
         k=cfg.top_k,
     )
 
-    # Build context block
+    # ── Guard: If no documents or chunks exist, ask user to upload ────────────
+    if not retrieved_chunks:
+        yield f"data: {json.dumps({'token': NO_DOCS_MESSAGE})}\n\n"
+        yield f"data: {json.dumps({'citations': []})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+
+    # ── Step 3: Build context block ───────────────────────────────────────────
     parts: list[str] = []
     for i, chunk in enumerate(retrieved_chunks, start=1):
         parts.append(
             f"[{i}] Source: {chunk['source']} | Page: {chunk['page']}\n{chunk['text']}"
         )
-    context = "\n\n---\n\n".join(parts) if parts else "No relevant context found."
+    context = "\n\n---\n\n".join(parts)
 
     # Build prompt
     history_lines: list[str] = []
@@ -235,24 +257,29 @@ async def stream_rag(
         history_lines.append(f"{role}: {msg['content']}")
     history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
 
-    prompt = f"""You are a knowledgeable AI tutor. Answer the student's question based ONLY on the provided context.
-If the answer cannot be found in the context, say so clearly.
-Cite sources as [Source: <filename>, Page: <N>].
+    prompt = f"""You are RagVault, an expert document-grounded AI assistant.
+Your task is to provide comprehensive, accurate, and direct answers to questions based ONLY on the provided context excerpts from uploaded documents.
 
-=== CONTEXT ===
+GUIDELINES:
+1. Ground your answer thoroughly in the facts, details, and explanations provided in the CONTEXT below.
+2. Structure your response clearly using Markdown (bullet points, bold text, headings, or numbered steps where appropriate).
+3. When presenting specific facts, reference the source like [Source: <filename>, Page: <page>].
+4. If the provided context does not contain enough information to answer the question, clearly state: "I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
+
+=== CONTEXT FROM UPLOADED DOCUMENTS ===
 {context}
 
 === CONVERSATION HISTORY ===
 {history_block}
 
-=== STUDENT QUESTION ===
+=== USER QUESTION ===
 {question}
 
-=== YOUR ANSWER ==="""
+=== GROUNDED RESPONSE ==="""
 
-    # ── Step 4: Stream tokens from Ollama ────────────────────────────────────
-    llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model)
-    logger.info("[RAG:stream] Streaming from Ollama model: %s", cfg.ollama_model)
+    # ── Step 4: Stream tokens from Ollama with temperature=0.0 (Strict Grounding)
+    llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model, temperature=0.0)
+    logger.info("[RAG:stream] Streaming strictly grounded response from Ollama model: %s", cfg.ollama_model)
 
     try:
         async for chunk in llm.astream(prompt):

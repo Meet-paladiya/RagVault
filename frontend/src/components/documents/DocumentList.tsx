@@ -1,14 +1,17 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileText, Presentation, Video, Music, Trash2, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { FileText, Presentation, Video, Music, Trash2, CheckCircle2, XCircle, Loader2, FileCode } from 'lucide-react'
 import { useDocuments, useDeleteDocument } from '@/api/documents'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import type { Document } from '@/types'
 
-const fileIcon = (ext: string) => {
+const fileIcon = (rawExt: string) => {
+  const ext = rawExt.startsWith('.') ? rawExt.toLowerCase() : `.${rawExt.toLowerCase()}`
   if (ext === '.pdf') return <FileText className="w-4 h-4 text-red-400" />
   if (ext === '.pptx') return <Presentation className="w-4 h-4 text-orange-400" />
+  if (ext === '.txt' || ext === '.md') return <FileCode className="w-4 h-4 text-cyan-400" />
+  if (ext === '.docx' || ext === '.doc') return <FileText className="w-4 h-4 text-indigo-400" />
   if (['.mp4', '.mkv', '.mov', '.avi', '.webm'].includes(ext)) return <Video className="w-4 h-4 text-blue-400" />
   return <Music className="w-4 h-4 text-green-400" />
 }

@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
 from app.models.chat import Chat
+from app.models.document import Document
 from app.models.user import User
 from app.schemas.chat import ChatCreate, ChatListResponse, ChatResponse
 from app.utils.chroma_client import delete_collection
@@ -92,11 +93,15 @@ async def delete_chat(
 
 
 @router.delete("/{chat_id}/clear-knowledge", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{chat_id}/clear-knowledge", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_knowledge(
     chat_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Clear all vector embeddings and documents for a knowledge space without deleting the chat."""
-    await _get_owned_chat(chat_id, current_user, db)
+    chat = await _get_owned_chat(chat_id, current_user, db)
     delete_collection(chat_id)
+    cid = _to_uuid(chat_id)
+    await db.execute(delete(Document).where(Document.chat_id == cid))
+    await db.commit()

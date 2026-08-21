@@ -5,7 +5,7 @@ import {
   Trash2, Zap, ChevronRight, ChevronLeft, Brain, MessageSquare, BookOpen, Sparkles, RotateCw
 } from 'lucide-react'
 import { useMessages, streamMessage } from '@/api/messages'
-import { useChat, useClearKnowledge } from '@/api/chats'
+import { useChat, useDeleteChat, useClearKnowledge } from '@/api/chats'
 import { useDocuments } from '@/api/documents'
 import { useGenerateQuiz, useSubmitQuiz } from '@/api/quiz'
 import { useNotes, useGenerateNotes } from '@/api/notes'
@@ -69,6 +69,7 @@ export function ChatDetailPage() {
   const docCount = docsData?.documents?.length ?? 0
   const { data: notesData } = useNotes(chatId!)
   const generateNotes = useGenerateNotes(chatId!)
+  const deleteChat = useDeleteChat()
   const clearKnowledge = useClearKnowledge()
   const generateQuiz = useGenerateQuiz(chatId!)
   const submitQuiz = useSubmitQuiz()
@@ -78,6 +79,7 @@ export function ChatDetailPage() {
   const [streamingContent, setStreamingContent] = useState<string | null>(null)
   const [optimisticUserMessage, setOptimisticUserMessage] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [docsPanelOpen, setDocsPanelOpen] = useState(true)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [quizTopic, setQuizTopic] = useState('')
   const [selectedQuizType, setSelectedQuizType] = useState<'auto' | 'topic' | null>(null)
@@ -176,6 +178,17 @@ export function ChatDetailPage() {
     }
   }
 
+  const handleDeleteChat = async () => {
+    if (!chatId || !confirm(`Are you sure you want to delete "${chatData?.title ?? 'this chat'}"?`)) return
+    try {
+      await deleteChat.mutateAsync(chatId)
+      toast({ description: 'Chat deleted.' })
+      navigate('/chats')
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete chat.', variant: 'destructive' })
+    }
+  }
+
   const handleClearKnowledge = async () => {
     if (!chatId || !confirm('Are you sure? This will delete all AI knowledge from this chat.')) return
     try {
@@ -188,70 +201,113 @@ export function ChatDetailPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Left Panel — Documents */}
-      <div className="w-72 min-w-[288px] max-w-[288px] flex-shrink-0 flex flex-col border-r border-white/10 glass overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/10 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-foreground">Documents</h3>
-            <Badge variant="secondary" className="text-[10px]">
-              {docCount} {docCount === 1 ? 'file' : 'files'}
-            </Badge>
+      {/* Left Panel — Documents (Collapsible Slider) */}
+      <motion.div
+        animate={{ width: docsPanelOpen ? 288 : 0 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="flex-shrink-0 flex flex-col border-r border-white/10 glass overflow-hidden relative"
+      >
+        {docsPanelOpen && (
+          <div className="w-72 min-w-[288px] max-w-[288px] flex flex-col h-full overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex-shrink-0 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold text-foreground">Documents</h3>
+                <Badge variant="secondary" className="text-[10px]">
+                  {docCount} {docCount === 1 ? 'file' : 'files'}
+                </Badge>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6 text-muted-foreground hover:text-foreground"
+                onClick={() => setDocsPanelOpen(false)}
+                title="Hide Documents"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Scrollable document list */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-3">
+              <DocumentList chatId={chatId!} />
+            </div>
+
+            {/* Fixed DropZone */}
+            <div className="p-3 border-t border-white/10 flex-shrink-0">
+              <DropZone chatId={chatId!} />
+            </div>
+
+            {/* Clear Knowledge Footer */}
+            <div className="p-3 border-t border-white/10 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10 border border-destructive/20"
+                onClick={handleClearKnowledge}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                Clear Knowledge
+              </Button>
+            </div>
           </div>
-        </div>
-
-        {/* Scrollable document list */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-3">
-          <DocumentList chatId={chatId!} />
-        </div>
-
-        {/* Fixed DropZone */}
-        <div className="p-3 border-t border-white/10 flex-shrink-0">
-          <DropZone chatId={chatId!} />
-        </div>
-
-        {/* Clear Knowledge Footer */}
-        <div className="p-3 border-t border-white/10 flex-shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10 border border-destructive/20"
-            onClick={handleClearKnowledge}
-          >
-            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-            Clear Knowledge
-          </Button>
-        </div>
-      </div>
+        )}
+      </motion.div>
 
       {/* Center Section — Dynamic View (Chat or AI Notes) */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 glass-card flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 glass-card flex-shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {!docsPanelOpen && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs bg-white/5 border-white/10 hover:bg-white/10 text-muted-foreground hover:text-foreground flex items-center gap-1"
+                onClick={() => setDocsPanelOpen(true)}
+                title="Show Documents Panel"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Docs ({docCount})</span>
+              </Button>
+            )}
             <Brain className="w-5 h-5 text-purple-400 flex-shrink-0" />
             <h2 className="text-sm font-semibold truncate">{chatData?.title ?? 'Knowledge Space'}</h2>
           </div>
 
-          {/* View Mode Toggle Buttons */}
-          <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Delete Chat Button */}
             <Button
-              variant={centerViewMode === 'chat' ? 'secondary' : 'ghost'}
+              variant="ghost"
               size="sm"
-              className="h-7 text-xs px-3"
-              onClick={() => setCenterViewMode('chat')}
+              className="h-7 text-xs px-2.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 border border-transparent hover:border-destructive/20 transition-colors"
+              onClick={handleDeleteChat}
+              title="Delete this chat space"
             >
-              <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-              Chat
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              <span className="hidden sm:inline">Delete Chat</span>
             </Button>
-            <Button
-              variant={centerViewMode === 'notes' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 text-xs px-3"
-              onClick={handleOpenNotes}
-            >
-              <Sparkles className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
-              AI Notes
-            </Button>
+
+            {/* View Mode Toggle Buttons */}
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+              <Button
+                variant={centerViewMode === 'chat' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 text-xs px-3"
+                onClick={() => setCenterViewMode('chat')}
+              >
+                <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+                Chat
+              </Button>
+              <Button
+                variant={centerViewMode === 'notes' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 text-xs px-3"
+                onClick={handleOpenNotes}
+              >
+                <Sparkles className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
+                AI Notes
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -341,9 +397,8 @@ export function ChatDetailPage() {
               <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
                 <button
                   onClick={() => setRhsTab('quiz')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    rhsTab === 'quiz' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${rhsTab === 'quiz' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   <Zap className="w-3.5 h-3.5" />
                   Quiz
@@ -353,9 +408,8 @@ export function ChatDetailPage() {
                     setRhsTab('notes')
                     handleOpenNotes()
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    rhsTab === 'notes' ? 'bg-purple-500/20 text-purple-300' : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${rhsTab === 'notes' ? 'bg-purple-500/20 text-purple-300' : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                   AI Notes
@@ -528,5 +582,6 @@ export function ChatDetailPage() {
         </Button>
       )}
     </div>
+
   )
 }

@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History, Sun, Moon
+  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History, Sun, Moon, Trash2
 } from 'lucide-react'
-import { useChats, useCreateChat } from '@/api/chats'
+import { useChats, useCreateChat, useDeleteChat } from '@/api/chats'
 import { useAuthStore } from '@/store/authStore'
 import { useThemeStore } from '@/store/themeStore'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { theme, toggleTheme } = useThemeStore()
   const { data: chatsData } = useChats()
   const createChat = useCreateChat()
+  const deleteChat = useDeleteChat()
   const { toast } = useToast()
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
@@ -45,6 +46,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       navigate(`/chats/${chat.id}`)
     } catch {
       toast({ title: 'Error', description: 'Failed to create chat.', variant: 'destructive' })
+    }
+  }
+
+  const handleDeleteChat = async (e: React.MouseEvent, id: string, title: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm(`Are you sure you want to delete "${title}"?`)) return
+    try {
+      await deleteChat.mutateAsync(id)
+      toast({ description: `Deleted "${title}".` })
+      if (chatId === id) {
+        navigate('/chats')
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete chat.', variant: 'destructive' })
     }
   }
 
@@ -132,22 +148,33 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ScrollArea className="flex-1 px-2">
           <div className="space-y-0.5 pb-2">
             {filtered.map((chat) => (
-              <Link key={chat.id} to={`/chats/${chat.id}`}>
+              <Link key={chat.id} to={`/chats/${chat.id}`} className="block">
                 <motion.div
                   whileHover={{ x: 2 }}
-                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer group transition-all duration-150 ${chatId === chat.id
+                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer group transition-all duration-150 ${chatId === chat.id
                     ? 'bg-primary/15 border-l-2 border-primary text-foreground'
                     : 'hover:bg-white/5 text-muted-foreground hover:text-foreground'
                     }`}
                 >
                   <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
                   {!collapsed && (
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{chat.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {formatDistanceToNow(new Date(chat.updated_at), { addSuffix: true })}
-                      </p>
-                    </div>
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{chat.title}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {formatDistanceToNow(new Date(chat.updated_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-6 h-6 flex-shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                        onClick={(e) => handleDeleteChat(e, chat.id, chat.title)}
+                        title="Delete chat"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </>
                   )}
                 </motion.div>
               </Link>

@@ -3,6 +3,7 @@ Documents router: file upload, status polling, and deletion.
 Only PPTX, PDF, video, and audio files are accepted — everything else is rejected with 422.
 Ingestion runs as a FastAPI BackgroundTask to avoid blocking the HTTP response.
 """
+import logging
 import os
 from uuid import UUID, uuid4
 
@@ -19,6 +20,7 @@ from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services.ingestion_service import _validate_extension, ingest_document
 from app.utils.chroma_client import delete_document_chunks
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chats", tags=["Documents"])
 
 # 2 GB upload limit
@@ -68,8 +70,8 @@ async def _background_ingest(
                 filename=filename,
                 document_id=document_id,
             )
-        except Exception:
-            pass  # Status already set to 'failed' inside ingest_document
+        except Exception as exc:
+            logger.exception("[INGEST:BG] Background ingestion failed for %s (%s): %s", filename, document_id, exc)
         finally:
             await engine.dispose()
 
@@ -89,7 +91,7 @@ async def upload_document(
     """
     Upload and ingest a document into a knowledge space.
 
-    - Validates file type (rejects DOCX, images, etc. with 422).
+    - Validates file type (PDF, PPTX, TXT, MD, DOCX, Video, Audio).
     - Streams file to temporary storage.
     - Creates Document record in 'processing' status.
     - Dispatches ingestion pipeline as a background task.
@@ -112,6 +114,7 @@ async def upload_document(
     # Save to temp directory
     doc_id = uuid4()
     temp_filename = f"{doc_id}{ext}"
+    os.makedirs(cfg.upload_temp_dir, exist_ok=True)
     temp_path = os.path.join(cfg.upload_temp_dir, temp_filename)
 
     file_size = 0
@@ -119,7 +122,8 @@ async def upload_document(
         while content := await file.read(1024 * 1024):  # 1MB chunks
             file_size += len(content)
             if file_size > MAX_FILE_SIZE:
-                os.unlink(temp_path)
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail="File size exceeds maximum allowed limit (2GB).",
@@ -133,7 +137,7 @@ async def upload_document(
         chat_id=cid,
         filename=file.filename,
         file_type=ext.lstrip("."),
-        file_size=file_size,
+        chroma_collection=f"chat_{str(cid).replace('-', '_')}",
         status="processing",
         total_pages=0,
         total_chunks=0,

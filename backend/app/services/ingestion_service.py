@@ -30,8 +30,7 @@ def _validate_extension(filename: str) -> str:
     if ext not in SUPPORTED_EXTENSIONS:
         raise ValueError(
             f"File type '{ext}' is not supported. "
-            f"Accepted types: PDF, PPTX, MP4/MKV/MOV/AVI/WEBM, MP3/WAV/M4A/OGG/FLAC/AAC. "
-            f"DOCX and image uploads are not accepted."
+            f"Accepted types: PDF, PPTX, TXT, MD, DOCX, MP4/MKV/MOV/AVI/WEBM, MP3/WAV/M4A/OGG/FLAC/AAC."
         )
     return ext
 
@@ -55,6 +54,8 @@ def _sync_ingest_pipeline(
     """
     logger.info("[INGEST] Parsing %s (document_id=%s)", filename, document_id)
     pages = parse_file(file_path)
+    for p in pages:
+        p["source"] = filename
     total_pages = len(pages)
     logger.info("[INGEST] Extracted %d pages from %s", total_pages, filename)
 

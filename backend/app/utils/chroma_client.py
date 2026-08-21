@@ -122,13 +122,17 @@ def query_collection(
     collection = get_or_create_collection(chat_id)
 
     try:
+        count = collection.count()
+        if count == 0:
+            return []
+        effective_k = min(k, count)
         results = collection.query(
             query_embeddings=[query_embedding],
-            n_results=k,
+            n_results=effective_k,
             include=["documents", "metadatas", "distances"],
         )
     except Exception as exc:
-        logger.warning("ChromaDB query failed (empty collection?): %s", exc)
+        logger.warning("ChromaDB query failed: %s", exc)
         return []
 
     hits: list[dict[str, Any]] = []

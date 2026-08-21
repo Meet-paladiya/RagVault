@@ -97,6 +97,7 @@ services:
       - HF_HOME=/hf_cache
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
     volumes:
+      - ./backend:/app
       - uploads_temp:/uploads/temp
       - hf_cache:/hf_cache
     ports:

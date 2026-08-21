@@ -52,11 +52,12 @@ export const useClearKnowledge = () => {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (chatId: string) => {
-      const res = await api.post(`/chats/${chatId}/clear-knowledge`)
+      const res = await api.delete(`/chats/${chatId}/clear-knowledge`)
       return res.data
     },
     onSuccess: (_, chatId) => {
       queryClient.invalidateQueries({ queryKey: ['documents', chatId] })
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] })
     },
   })
 }

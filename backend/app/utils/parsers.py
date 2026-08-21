@@ -5,11 +5,12 @@ import os
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {
-    ".pdf", ".pptx",
+    ".pdf", ".pptx", ".txt", ".md", ".docx",
     ".mp4", ".mkv", ".mov", ".avi", ".webm",
     ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"
 }
 
+TEXT_EXTENSIONS = {".txt", ".md"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
 
@@ -20,12 +21,87 @@ def parse_file(path: str) -> List[Dict[str, Any]]:
         return parse_pdf(path)
     elif ext == ".pptx":
         return parse_pptx(path)
+    elif ext in TEXT_EXTENSIONS:
+        return parse_text(path)
+    elif ext == ".docx":
+        return parse_docx(path)
     elif ext in AUDIO_EXTENSIONS:
         return parse_audio(path)
     elif ext in VIDEO_EXTENSIONS:
         return parse_video(path)
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
+
+def parse_text(path: str) -> List[Dict[str, Any]]:
+    """Plain text or Markdown file extraction."""
+    logger.info(f"Parsing text/markdown: {path}")
+    source = os.path.basename(path)
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        content = f.read()
+
+    if not content.strip():
+        return []
+
+    # If text is long, break it into pseudo-pages of ~2000 characters
+    page_size = 2000
+    pages = []
+    lines = content.splitlines(keepends=True)
+    current_page_text = []
+    current_len = 0
+    page_num = 1
+
+    for line in lines:
+        current_page_text.append(line)
+        current_len += len(line)
+        if current_len >= page_size:
+            text = "".join(current_page_text).strip()
+            if text:
+                pages.append({"text": text, "page": page_num, "source": source})
+                page_num += 1
+            current_page_text = []
+            current_len = 0
+
+    if current_page_text:
+        text = "".join(current_page_text).strip()
+        if text:
+            pages.append({"text": text, "page": page_num, "source": source})
+
+    return pages
+
+def parse_docx(path: str) -> List[Dict[str, Any]]:
+    """Extract text from Word .docx file using python-docx or zipfile XML fallback."""
+    logger.info(f"Parsing DOCX: {path}")
+    source = os.path.basename(path)
+    try:
+        import docx
+        doc = docx.Document(path)
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        full_text = "\n\n".join(paragraphs)
+    except Exception:
+        # Fallback to direct XML extraction from docx zip
+        import zipfile
+        import xml.etree.ElementTree as ET
+        full_text = ""
+        try:
+            with zipfile.ZipFile(path) as z:
+                xml_content = z.read("word/document.xml")
+                tree = ET.fromstring(xml_content)
+                text_elements = [elem.text for elem in tree.iter() if elem.text]
+                full_text = " ".join(text_elements)
+        except Exception as exc:
+            logger.error(f"Failed to parse docx {path}: {exc}")
+
+    if not full_text.strip():
+        return []
+
+    # Break into pseudo-pages
+    page_size = 2000
+    pages = []
+    chunks = [full_text[i:i + page_size] for i in range(0, len(full_text), page_size)]
+    for i, c in enumerate(chunks, start=1):
+        if c.strip():
+            pages.append({"text": c.strip(), "page": i, "source": source})
+    return pages
 
 def parse_pdf(path: str) -> List[Dict[str, Any]]:
     """PyMuPDF page-by-page extraction."""
