@@ -1,5 +1,5 @@
 """
-Quiz service: MCQ generation via local Ollama LLM in parallel batches, grading, and weak-topic analysis.
+Quiz service: MCQ generation via local LLM in parallel batches, grading, and weak-topic analysis.
 """
 import asyncio
 import json
@@ -8,11 +8,12 @@ import re
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 from fastapi import HTTPException, status
-from langchain_community.llms import Ollama
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models.quiz import Quiz
 from app.utils.chroma_client import query_collection
 from app.utils.embedder import embed_single
@@ -95,16 +96,30 @@ def _normalise_compact_questions(questions: list[dict[str, Any]], prefix: str) -
     return valid
 
 
-def _invoke_llm(llm: Ollama, prompt: str) -> str:
-    return llm.invoke(prompt)
+async def _invoke_llm_async(prompt: str) -> str:
+    """Send prompt to local OpenAI-compatible / llama.cpp LLM server."""
+    cfg = get_settings()
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{cfg.llm_base_url}/chat/completions",
+            json={
+                "model": cfg.llm_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+                "stream": False,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
 
 
-async def _fetch_question_batch(llm: Ollama, prompt: str, prefix: str) -> list[dict[str, Any]]:
+async def _fetch_question_batch(prompt: str, prefix: str) -> list[dict[str, Any]]:
     """Fetch a single question batch with 2 retries."""
     for attempt in range(1, 3):
         try:
             logger.info("[QUIZ] Generating batch '%s' (attempt %d)...", prefix, attempt)
-            raw = await asyncio.to_thread(_invoke_llm, llm, prompt)
+            raw = await _invoke_llm_async(prompt)
             parsed = _extract_json_array(raw)
             validated = _normalise_compact_questions(parsed, prefix)
             if validated:
@@ -126,10 +141,6 @@ async def generate_quiz(
     """
     Generate a 20-question quiz (10 MCQs + 10 Fill-in-the-blanks) in parallel batches.
     """
-    from app.config import get_settings
-
-    cfg = get_settings()
-
     # ── Retrieve relevant chunks ──────────────────────────────────────────────
     if topic == "General Summary":
         from app.utils.chroma_client import get_all_chunks
@@ -148,16 +159,14 @@ async def generate_quiz(
         f"[Source: {c['source']}, Page: {c['page']}]\n{c['text']}" for c in chunks
     )
 
-    # ── Dispatch parallel batch requests to Ollama ───────────────────────────
-    llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model, temperature=0.2)
-
+    # ── Dispatch parallel batch requests to LLM ──────────────────────────────
     prompt_mcq = _build_batch_prompt(topic, context, "mcq", count=10)
     prompt_blank = _build_batch_prompt(topic, context, "blank", count=10)
 
-    mcq_task = _fetch_question_batch(llm, prompt_mcq, "mcq")
-    blank_task = _fetch_question_batch(llm, prompt_blank, "blank")
+    mcq_task = _fetch_question_batch(prompt_mcq, "mcq")
+    blank_task = _fetch_question_batch(prompt_blank, "blank")
 
-    logger.info("[QUIZ] Dispatching parallel MCQ & Fill-in-blank batches to Ollama...")
+    logger.info("[QUIZ] Dispatching parallel MCQ & Fill-in-blank batches to local LLM...")
     mcqs, blanks = await asyncio.gather(mcq_task, blank_task)
 
     questions = mcqs + blanks
@@ -165,7 +174,7 @@ async def generate_quiz(
     if not questions:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate valid quiz questions from Ollama. Please try again.",
+            detail="Failed to generate valid quiz questions from local LLM. Please try again.",
         )
 
     # ── Persist quiz ──────────────────────────────────────────────────────────

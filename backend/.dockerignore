@@ -1,0 +1,14 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+tests/
+.env
+.git/
+.gitignore
+backend_dependencies.txt
+chroma_export.json
+inspect_chroma.py

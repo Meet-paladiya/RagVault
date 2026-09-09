@@ -41,3 +41,6 @@ logs/
 
 # Docker
 *.env.docker
+
+models/
+*.gguf

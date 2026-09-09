@@ -5,13 +5,13 @@ Graph topology:
   embed_question → retrieve_chunks → assemble_context → generate_answer → extract_citations → END
 
 Supports both streaming (SSE token-by-token) and non-streaming response modes.
-LLM calls go to Ollama running locally via langchain_community.
+LLM calls connect to the local high-speed C++ engine (llama.cpp server / OpenAI compatible API).
 """
 import json
 import logging
 from typing import Any, AsyncGenerator, TypedDict
 
-from langchain_community.llms import Ollama
+import httpx
 from langgraph.graph import END, StateGraph
 
 from app.utils.chroma_client import query_collection
@@ -45,7 +45,7 @@ class RAGState(TypedDict):
 # ─── LangGraph Nodes ─────────────────────────────────────────────────────────
 
 def embed_question_node(state: RAGState) -> RAGState:
-    """Node 1: Embed the user question using the same model used at ingest time."""
+    """Node 1: Embed the user question using the fast ONNX embedding model."""
     logger.debug("[RAG] Embedding question")
     state["query_embedding"] = embed_single(state["question"])
     return state
@@ -105,7 +105,7 @@ GUIDELINES:
 
 
 def generate_answer_node(state: RAGState) -> RAGState:
-    """Node 4: Call Ollama LLM with the assembled prompt (non-streaming path)."""
+    """Node 4: Call LLM with the assembled prompt (non-streaming path)."""
     from app.config import get_settings
 
     if not state.get("retrieved_chunks") or not state.get("context"):
@@ -113,17 +113,28 @@ def generate_answer_node(state: RAGState) -> RAGState:
         return state
 
     cfg = get_settings()
-    llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model, temperature=0.0)
-
     prompt = _build_prompt(state)
+
     try:
-        answer = llm.invoke(prompt)
-        state["answer"] = answer.strip()
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(
+                f"{cfg.llm_base_url}/chat/completions",
+                json={
+                    "model": cfg.llm_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0,
+                    "stream": False,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            answer = data["choices"][0]["message"]["content"]
+            state["answer"] = answer.strip()
     except Exception as exc:
         logger.error("[RAG] LLM generation error: %s", exc)
         state["answer"] = (
-            f"⚠️ **LLM Error**: Could not generate response using Ollama model `{cfg.ollama_model}`.\n"
-            f"Please ensure Ollama is running and run `ollama pull {cfg.ollama_model}`."
+            f"⚠️ **LLM Error**: Could not generate response using local LLM model `{cfg.llm_model}`.\n"
+            f"Please ensure local LLM server is running at `{cfg.llm_base_url}`."
         )
     return state
 
@@ -277,19 +288,46 @@ GUIDELINES:
 
 === GROUNDED RESPONSE ==="""
 
-    # ── Step 4: Stream tokens from Ollama with temperature=0.0 (Strict Grounding)
-    llm = Ollama(base_url=cfg.ollama_base_url, model=cfg.ollama_model, temperature=0.0)
-    logger.info("[RAG:stream] Streaming strictly grounded response from Ollama model: %s", cfg.ollama_model)
+    # ── Step 4: Stream tokens from LLM with temperature=0.0 (Strict Grounding)
+    logger.info("[RAG:stream] Streaming response from local LLM at %s", cfg.llm_base_url)
 
     try:
-        async for chunk in llm.astream(prompt):
-            if chunk:
-                yield f"data: {json.dumps({'token': str(chunk)})}\n\n"
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                f"{cfg.llm_base_url}/chat/completions",
+                json={
+                    "model": cfg.llm_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0,
+                    "stream": True,
+                },
+            ) as response:
+                if response.status_code != 200:
+                    err_text = await response.aread()
+                    raise RuntimeError(f"LLM returned HTTP {response.status_code}: {err_text.decode('utf-8', errors='ignore')}")
+
+                async for raw_line in response.aiter_lines():
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        payload = line[6:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            chunk_data = json.loads(payload)
+                            delta = chunk_data.get("choices", [{}])[0].get("delta", {})
+                            token = delta.get("content", "")
+                            if token:
+                                yield f"data: {json.dumps({'token': token})}\n\n"
+                        except Exception:
+                            continue
     except Exception as exc:
         logger.error("[RAG:stream] LLM streaming error: %s", exc)
         err_msg = (
-            f"⚠️ **LLM Model Error**: Failed to stream from Ollama model `{cfg.ollama_model}`.\n"
-            f"Please ensure Ollama is running and run `ollama pull {cfg.ollama_model}`."
+            f"⚠️ **LLM Model Error**: Failed to stream from LLM at `{cfg.llm_base_url}`.\n"
+            f"Please ensure local LLM server is running. Error: {exc}"
         )
         yield f"data: {json.dumps({'token': err_msg})}\n\n"
 

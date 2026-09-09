@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  Offline AI Knowledge Hub — Docker Compose
-#  Services: postgres | chromadb | ollama | backend | frontend
-#  One-time setup: docker compose up -d
-#  No internet required after initial model pulls.
+#  RagVault (Offline AI Knowledge Hub) — Ultra-Lean Docker Compose (~4.1 GB)
+#  Services: postgres | chromadb | model-init | llm (llama.cpp) | backend | frontend
+#  One-click setup: docker compose up -d
+#  100% offline after initial download.
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:
@@ -12,11 +12,19 @@ networks:
 volumes:
   postgres_data:
   chroma_data:
-  ollama_models:
   hf_cache:
   uploads_temp:
 
 services:
+
+  # ── Model Init (Automatic Zero-Config Model Downloader) ──────────────────────
+  model-init:
+    image: python:3.11-alpine
+    container_name: hub_model_init
+    volumes:
+      - ./models:/models
+      - ./scripts:/scripts
+    command: ["python", "/scripts/setup_model.py"]
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
@@ -37,7 +45,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "5432:5432" # Expose for local dev; remove in production
+      - "5432:5432" # Expose for local dev
 
   # ── ChromaDB ───────────────────────────────────────────────────────────────
   chromadb:
@@ -52,25 +60,27 @@ services:
       - ANONYMIZED_TELEMETRY=FALSE
     volumes:
       - chroma_data:/chroma_data
-
     ports:
       - "8001:8000" # Expose for local dev inspection
 
-  # ── Ollama (Local LLM Runtime) ─────────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: hub_ollama
+  # ── LLM (llama.cpp Server — High-speed, Ultra-lean C++ Offline Engine) ──────
+  llm:
+    image: ghcr.io/abetlen/llama-cpp-python:latest
+    container_name: hub_llm
     restart: unless-stopped
     networks:
       - hub_net
+    depends_on:
+      model-init:
+        condition: service_completed_successfully
     volumes:
-      - ollama_models:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
+      - ./models:/models
+    entrypoint: ["python3", "-m", "llama_cpp.server"]
+    command: ["--model", "/models/qwen2.5-1.5b-instruct-q4_k_m.gguf", "--host", "0.0.0.0", "--port", "8080", "--n_threads", "4", "--n_ctx", "2048"]
     ports:
-      - "11434:11434"
+      - "8080:8000"
 
-    # ── Backend (FastAPI) ──────────────────────────────────────────────────────
+  # ── Backend (FastAPI + FastEmbed ONNX ~1.15GB) ──────────────────────────────
   backend:
     build:
       context: ./backend
@@ -84,7 +94,7 @@ services:
         condition: service_healthy
       chromadb:
         condition: service_started
-      ollama:
+      llm:
         condition: service_started
     env_file:
       - .env
@@ -92,10 +102,9 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://knowledge_user:pg_sec_9d3f82a7b1c4e650@postgres:5432/knowledge_hub}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b-instruct}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://llm:8000/v1}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5-1.5b-instruct}
       - HF_HOME=/hf_cache
-      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
     volumes:
       - ./backend:/app
       - uploads_temp:/uploads/temp
@@ -105,7 +114,7 @@ services:
     healthcheck:
       test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")'" ]
 
-  # ── Frontend (React + Vite, served via Nginx) ──────────────────────────────
+  # ── Frontend (React + Vite, served via Nginx ~45MB) ─────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -120,7 +129,6 @@ services:
       - "3000:80"
 
   # ── Nginx Reverse Proxy (optional profile) ─────────────────────────────────
-  # Start with: docker compose --profile nginx up -d
   nginx:
     image: nginx:alpine
     container_name: hub_nginx

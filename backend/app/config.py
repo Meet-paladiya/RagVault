@@ -20,12 +20,14 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
 
-    # ── Ollama (Local LLM) ───────────────────────────────────────────────────
-    ollama_base_url: str = "http://ollama:11434"
-    ollama_model: str = "qwen2.5:1.5b-instruct"
+    # ── Local LLM (llama.cpp / OpenAI-compatible Server) ───────────────────────
+    llm_base_url: str = "http://llm:8000/v1"
+    llm_model: str = "qwen2.5-1.5b-instruct"
+    ollama_base_url: str = "http://llm:8080/v1"
+    ollama_model: str = "qwen2.5-1.5b-instruct"
 
     # ── Embeddings ───────────────────────────────────────────────────────────
-    embedding_model: str = "BAAI/bge-base-en-v1.5"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_fallback_model: str = "nomic-embed-text"
 
     # ── ChromaDB ─────────────────────────────────────────────────────────────
