@@ -32,6 +32,7 @@ export const useUploadDocument = (chatId: string) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['documents', chatId] })
+      queryClient.setQueryData(['notes', chatId], null)
     },
   })
 }

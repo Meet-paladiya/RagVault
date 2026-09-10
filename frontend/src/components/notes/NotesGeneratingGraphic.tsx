@@ -1,24 +1,7 @@
 import { motion } from 'framer-motion'
-import { Sparkles, FileText, Brain, Layers, CheckCircle2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-
-const STEPS = [
-  'Parsing document resources & vector embeddings...',
-  'Extracting core concepts, definitions & formulas...',
-  'Synthesizing key takeaways and summaries...',
-  'Formatting AI Study Note Cards...',
-]
+import { Sparkles, FileText, Brain } from 'lucide-react'
 
 export function NotesGeneratingGraphic() {
-  const [currentStep, setCurrentStep] = useState(0)
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentStep((prev) => (prev + 1) % STEPS.length)
-    }, 2800)
-    return () => clearInterval(timer)
-  }, [])
-
   return (
     <div className="flex flex-col items-center justify-center h-full w-full p-8 text-center glass-card rounded-2xl relative overflow-hidden">
       {/* Background Animated Glow Spheres */}
@@ -52,13 +35,12 @@ export function NotesGeneratingGraphic() {
             <Brain className="w-12 h-12 text-white animate-pulse" />
           </motion.div>
 
-          {/* Orbiting Floating Cards / Icons */}
           <motion.div
             animate={{ y: [-6, 6, -6], x: [-4, 4, -4] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
             className="absolute -top-3 -right-4 bg-surface border border-primary/30 backdrop-blur-md p-2 rounded-xl text-primary shadow-md flex items-center gap-1 text-[11px] font-medium"
           >
-            <FileText className="w-3.5 h-3.5" /> Chunks
+            <FileText className="w-3.5 h-3.5" /> Reading pages
           </motion.div>
 
           <motion.div
@@ -66,7 +48,7 @@ export function NotesGeneratingGraphic() {
             transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
             className="absolute -bottom-3 -left-4 bg-surface border border-blue-400/30 backdrop-blur-md p-2 rounded-xl text-primary shadow-md flex items-center gap-1 text-[11px] font-medium"
           >
-            <Layers className="w-3.5 h-3.5" /> Cards
+            <FileText className="w-3.5 h-3.5" /> Building PDF
           </motion.div>
         </div>
 
@@ -77,27 +59,19 @@ export function NotesGeneratingGraphic() {
         </div>
 
         <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
-          Synthesizing high-yield study cards from all documents uploaded to this Knowledge Space.
+          Creating a complete page-by-page study summary with formulas and important details. This can take a while on a CPU-only laptop.
         </p>
 
-        {/* Dynamic Progress Indicator */}
         <div className="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 backdrop-blur-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-primary font-medium">
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-primary animate-pulse" />
-              {STEPS[currentStep]}
-            </span>
-            <span className="text-[10px] text-muted-foreground">{currentStep + 1} / {STEPS.length}</span>
+          <div className="flex items-center gap-2 text-xs text-primary font-medium">
+            <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
+            Generating exam-ready notes...
           </div>
-
-          {/* Animated Progress Bar */}
           <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
             <motion.div
-              key={currentStep}
-              initial={{ width: '0%' }}
-              animate={{ width: '100%' }}
-              transition={{ duration: 2.8, ease: 'linear' }}
-              className="h-full bg-gradient-to-r from-primary to-blue-500"
+              animate={{ x: ['-100%', '100%'] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+              className="h-full w-1/3 bg-gradient-to-r from-primary to-blue-500"
             />
           </div>
         </div>

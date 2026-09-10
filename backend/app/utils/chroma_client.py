@@ -125,7 +125,7 @@ def query_collection(
         count = collection.count()
         if count == 0:
             return []
-        effective_k = min(k, count)
+        effective_k = min(max(k * 3, k), count)
         results = collection.query(
             query_embeddings=[query_embedding],
             n_results=effective_k,
@@ -135,13 +135,13 @@ def query_collection(
         logger.warning("ChromaDB query failed: %s", exc)
         return []
 
-    hits: list[dict[str, Any]] = []
     docs = results.get("documents", [[]])[0] or []
     metas = results.get("metadatas", [[]])[0] or []
     dists = results.get("distances", [[]])[0] or []
 
+    candidates: list[dict[str, Any]] = []
     for doc_text, meta, dist in zip(docs, metas, dists):
-        hits.append(
+        candidates.append(
             {
                 "text": doc_text,
                 "source": meta.get("source", "unknown"),
@@ -151,6 +151,25 @@ def query_collection(
                 "distance": float(dist),
             }
         )
+
+    # Prefer relevant chunks from different uploaded documents before filling
+    # the remaining slots with the strongest matches.
+    hits: list[dict[str, Any]] = []
+    selected_ids: set[str] = set()
+    for candidate in candidates:
+        document_id = candidate["document_id"] or candidate["source"]
+        if document_id not in selected_ids:
+            hits.append(candidate)
+            selected_ids.add(document_id)
+        if len(hits) == k:
+            return hits
+
+    for candidate in candidates:
+        if candidate not in hits:
+            hits.append(candidate)
+        if len(hits) == k:
+            break
+
     return hits
 
 

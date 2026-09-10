@@ -5,7 +5,7 @@ All routes require authentication. Ownership is verified on every operation.
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +13,7 @@ from app.core.dependencies import get_current_user, get_db
 from app.models.chat import Chat
 from app.models.document import Document
 from app.models.user import User
-from app.schemas.chat import ChatCreate, ChatListResponse, ChatResponse
+from app.schemas.chat import ChatCreate, ChatListResponse, ChatResponse, ChatUpdate
 from app.utils.chroma_client import delete_collection
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -28,7 +28,7 @@ async def _get_owned_chat(chat_id: str, user: User, db: AsyncSession) -> Chat:
     cid = _to_uuid(chat_id)
     result = await db.execute(select(Chat).where(Chat.id == cid))
     chat = result.scalar_one_or_none()
-    if not chat:
+    if not chat or chat.is_deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found.")
     if str(chat.user_id) != str(user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
@@ -40,10 +40,13 @@ async def list_chats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChatListResponse:
-    """Return all knowledge spaces owned by the authenticated user."""
+    """Return all active (non-deleted) knowledge spaces owned by the authenticated user."""
     result = await db.execute(
         select(Chat)
-        .where(Chat.user_id == current_user.id)
+        .where(
+            Chat.user_id == current_user.id,
+            (Chat.is_deleted == False) | (Chat.is_deleted.is_(None))
+        )
         .order_by(Chat.updated_at.desc())
     )
     chats = result.scalars().all()
@@ -79,16 +82,42 @@ async def get_chat(
     return ChatResponse.model_validate(chat)
 
 
+@router.patch("/{chat_id}", response_model=ChatResponse)
+async def update_chat(
+    chat_id: str,
+    payload: ChatUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChatResponse:
+    """Rename a knowledge space owned by the authenticated user."""
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Chat title cannot be empty.")
+    chat = await _get_owned_chat(chat_id, current_user, db)
+    chat.title = title[:120]
+    await db.commit()
+    await db.refresh(chat)
+    return ChatResponse.model_validate(chat)
+
+
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chat(
     chat_id: str,
+    purge: bool = Query(True),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete a knowledge space and its associated ChromaDB collection."""
+    """
+    Delete a knowledge space.
+    By default (purge=True), hard-deletes the chat and purges the ChromaDB vector collection.
+    If purge=False, soft-deletes the chat.
+    """
     chat = await _get_owned_chat(chat_id, current_user, db)
-    delete_collection(chat_id)
-    await db.delete(chat)
+    if purge:
+        delete_collection(chat_id)
+        await db.delete(chat)
+    else:
+        chat.is_deleted = True
     await db.commit()
 
 

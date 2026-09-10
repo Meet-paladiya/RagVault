@@ -7,8 +7,10 @@ Graph topology:
 Supports both streaming (SSE token-by-token) and non-streaming response modes.
 LLM calls connect to the local high-speed C++ engine (llama.cpp server / OpenAI compatible API).
 """
+import asyncio
 import json
 import logging
+import re
 from typing import Any, AsyncGenerator, TypedDict
 
 import httpx
@@ -16,6 +18,7 @@ from langgraph.graph import END, StateGraph
 
 from app.utils.chroma_client import query_collection
 from app.utils.embedder import embed_single
+from app.services.llm_gate import ollama_generation_gate
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +47,35 @@ class RAGState(TypedDict):
 
 # ─── LangGraph Nodes ─────────────────────────────────────────────────────────
 
+def _derive_search_query(question: str, chat_history: list[dict[str, str]]) -> str:
+    """
+    If there is chat history and the current question is ambiguous or a follow-up,
+    combine key context from the last user question to form a contextualized vector search query.
+    """
+    if not chat_history:
+        return question
+
+    last_user_msgs = [m["content"] for m in chat_history if m.get("role") == "user"]
+    if not last_user_msgs:
+        return question
+
+    q_lower = question.lower()
+    pronouns = {"it", "its", "this", "that", "these", "those", "they", "them", "second", "first", "third", "previous", "above", "former", "latter", "more", "detail", "explain"}
+    words = set(re.findall(r'\b\w+\b', q_lower))
+
+    if len(words) < 8 or (words & pronouns):
+        last_q = last_user_msgs[-1][:200]
+        logger.debug("[RAG] Contextualized follow-up query: '%s %s'", last_q, question)
+        return f"{last_q} {question}"
+
+    return question
+
+
 def embed_question_node(state: RAGState) -> RAGState:
     """Node 1: Embed the user question using the fast ONNX embedding model."""
     logger.debug("[RAG] Embedding question")
-    state["query_embedding"] = embed_single(state["question"])
+    search_query = _derive_search_query(state["question"], state.get("chat_history", []))
+    state["query_embedding"] = embed_single(search_query)
     return state
 
 
@@ -239,7 +267,8 @@ async def stream_rag(
     cfg = get_settings()
 
     # ── Steps 1-2: embed → retrieve ───
-    query_embedding = embed_single(question)
+    search_query = _derive_search_query(question, chat_history)
+    query_embedding = embed_single(search_query)
     retrieved_chunks = query_collection(
         chat_id=chat_id,
         query_embedding=query_embedding,

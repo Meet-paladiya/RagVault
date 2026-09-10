@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { BookOpen, ChevronDown, ChevronUp, User, Brain, Copy, Check } from 'lucide-react'
 import { format, isToday, isYesterday } from 'date-fns'
+import { parseBackendDate } from '@/lib/utils'
 import type { Message, Citation } from '@/types'
 import { Badge } from '@/components/ui/badge'
 
@@ -15,8 +16,7 @@ interface MessageBubbleProps {
 
 function formatMessageTime(dateStr: string): string {
   if (!dateStr) return ''
-  const str = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z'
-  const date = new Date(str)
+  const date = parseBackendDate(dateStr)
   if (isNaN(date.getTime())) return ''
   
   if (isToday(date)) {
@@ -43,6 +43,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       // ignore
     }
   }
+
 
   return (
     <motion.div
@@ -131,7 +132,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Timestamp and Copy button */}
+        {/* Timestamp, Copy, and Delete buttons */}
         <div className={`flex items-center gap-2 mt-1 px-1 text-[10px] text-muted-foreground ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
           <span>{formatMessageTime(message.created_at)}</span>
           <button

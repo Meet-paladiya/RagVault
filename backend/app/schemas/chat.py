@@ -6,6 +6,9 @@ from typing import List
 class ChatCreate(BaseModel):
     title: str
 
+class ChatUpdate(BaseModel):
+    title: str
+
 class ChatResponse(BaseModel):
     id: UUID
     user_id: UUID

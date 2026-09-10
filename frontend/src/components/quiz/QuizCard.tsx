@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronRight, XCircle, CheckCircle2, BookOpen, RotateCcw } from 'lucide-react'
+import { ChevronRight, XCircle, CheckCircle2, BookOpen, RotateCcw, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -93,11 +93,13 @@ export function QuizCard({ quiz, onSubmit, isSubmitting }: QuizCardProps) {
 
 interface QuizResultsProps {
   result: QuizResult
-  onRecommendations: () => void
+  onRecommendations?: () => void
   onRetry: () => void
+  onGenerateRemedialNotes?: () => void
+  isGeneratingRemedial?: boolean
 }
 
-export function QuizResults({ result, onRetry }: QuizResultsProps) {
+export function QuizResults({ result, onRetry, onGenerateRemedialNotes, isGeneratingRemedial }: QuizResultsProps) {
   const pct = Math.round(result.score)
   const circumference = 2 * Math.PI * 40
 
@@ -200,8 +202,18 @@ export function QuizResults({ result, onRetry }: QuizResultsProps) {
 
       {/* Actions */}
       <div className="flex flex-col gap-2 pt-2">
+        {onGenerateRemedialNotes && (
+          <Button
+            onClick={onGenerateRemedialNotes}
+            disabled={isGeneratingRemedial}
+            className="w-full btn-gradient text-white border-0 h-9 text-xs font-semibold rounded-xl"
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-300" />
+            {isGeneratingRemedial ? 'Generating Remedial Notes...' : 'Generate Wrong Answers Notes & PDF'}
+          </Button>
+        )}
         <Button onClick={onRetry} variant="outline" size="sm" className="w-full border-white/15">
-          <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Try Again
+          <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Try Another Quiz
         </Button>
       </div>
     </motion.div>

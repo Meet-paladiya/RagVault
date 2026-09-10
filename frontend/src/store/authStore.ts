@@ -5,6 +5,7 @@ import type { User, AuthTokens } from '@/types'
 interface AuthState {
   user: User | null
   tokens: AuthTokens | null
+  sessionId: string | null
   setAuth: (user: User, tokens: AuthTokens) => void
   clearAuth: () => void
   updateTokens: (tokens: AuthTokens) => void
@@ -15,13 +16,14 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       tokens: null,
-      setAuth: (user, tokens) => set({ user, tokens }),
-      clearAuth: () => set({ user: null, tokens: null }),
+      sessionId: null,
+      setAuth: (user, tokens) => set({ user, tokens, sessionId: crypto.randomUUID() }),
+      clearAuth: () => set({ user: null, tokens: null, sessionId: null }),
       updateTokens: (tokens) => set({ tokens }),
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ tokens: state.tokens, user: state.user }),
+      partialize: (state) => ({ tokens: state.tokens, user: state.user, sessionId: state.sessionId }),
     }
   )
 )

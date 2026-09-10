@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Sparkles, RotateCw, Copy, Check, FileText, Search
+  Sparkles, RotateCw, Copy, Check, FileText, Search, Download
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,10 +13,12 @@ import type { NotesResponse, NoteCard } from '@/types'
 interface NotesCardsViewProps {
   notes: NotesResponse
   onRegenerate: () => void
+  onDownloadPdf: () => Promise<void>
   isRegenerating?: boolean
+  isDownloadingPdf?: boolean
 }
 
-export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCardsViewProps) {
+export function NotesCardsView({ notes, onRegenerate, onDownloadPdf, isRegenerating, isDownloadingPdf }: NotesCardsViewProps) {
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const { toast } = useToast()
@@ -44,33 +46,44 @@ export function NotesCardsView({ notes, onRegenerate, isRegenerating }: NotesCar
         <div>
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">{notes.title}</h2>
+            <h2 className="text-sm font-semibold text-foreground">{notes.title} - PDF-ready summary</h2>
             <Badge variant="secondary" className="text-[10px]">
               {notes.cards.length} cards
             </Badge>
           </div>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Auto-synthesized key concepts from all uploaded documents in this chat.
+            Complete page-by-page summary from every uploaded document. Download the searchable PDF for exam revision.
           </p>
         </div>
 
-        {/* Circular round line around Regenerate Notes button */}
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onRegenerate}
-          disabled={isRegenerating}
-          className="h-8 text-xs rounded-full border-2 border-primary/50 hover:border-primary px-4 bg-primary/10 hover:bg-primary/20 text-foreground transition-all shadow-sm"
-        >
-          <RotateCw className={`w-3.5 h-3.5 mr-1.5 text-primary ${isRegenerating ? 'animate-spin' : ''}`} />
-          {isRegenerating ? 'Generating...' : 'Regenerate Notes'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDownloadPdf}
+            disabled={isDownloadingPdf}
+            className="h-8 text-xs border-primary/50 hover:border-primary px-3 bg-primary/10 hover:bg-primary/20 text-foreground"
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5 text-primary" />
+            {isDownloadingPdf ? 'Preparing PDF...' : 'Download Study PDF'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRegenerate}
+            disabled={isRegenerating}
+            className="h-8 text-xs border-white/20 px-3"
+          >
+            <RotateCw className={`w-3.5 h-3.5 mr-1.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+            {isRegenerating ? 'Generating...' : 'Regenerate'}
+          </Button>
+        </div>
       </div>
 
       {/* Search Bar (Cleaned up right side section tags) */}
       <div className="px-6 py-3 border-b border-white/10 bg-white/3 flex items-center justify-between gap-3 flex-shrink-0">
         <div className="text-xs text-muted-foreground font-medium">
-          Study Cards ({filteredCards.length})
+          Page Summaries ({filteredCards.length})
         </div>
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />

@@ -21,6 +21,7 @@ from app.schemas.quiz import (
     RecommendationResponse,
 )
 from app.services.quiz_service import generate_quiz, submit_quiz
+from app.services.document_readiness import ensure_documents_ready
 from app.services.recommendation_service import get_recommendations
 
 router = APIRouter(tags=["Quiz"])
@@ -51,6 +52,7 @@ async def create_quiz(
 ) -> QuizResponse:
     """Generate a quiz from documents in the knowledge space."""
     await _verify_chat_ownership(chat_id, current_user, db)
+    await ensure_documents_ready(chat_id, db)
     quiz = await generate_quiz(
         db=db,
         chat_id=chat_id,

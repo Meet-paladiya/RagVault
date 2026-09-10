@@ -1,36 +1,75 @@
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Brain, Plus, Sparkles } from 'lucide-react'
+import { Brain, Plus, Sparkles, RotateCw } from 'lucide-react'
 import { useChats, useCreateChat } from '@/api/chats'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { useEffect } from 'react'
+import { useAuthStore } from '@/store/authStore'
 
 export function ChatsPage() {
   const { data, isLoading } = useChats()
   const createChat = useCreateChat()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const user = useAuthStore((state) => state.user)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const hasHandledRef = useRef(false)
 
   const chats = data?.chats ?? []
 
-  // Auto-redirect to most recent chat if any
   useEffect(() => {
-    if (!isLoading && chats.length > 0) {
-      navigate(`/chats/${chats[0].id}`, { replace: true })
+    if (isLoading || !user) return
+
+    const storageKey = `ragvault-last-chat:${user.id}`
+    const storedChatId = localStorage.getItem(storageKey)
+    const storedChat = chats.find((chat) => chat.id === storedChatId)
+    const targetChat = storedChat ?? chats[0]
+
+    if (!targetChat) {
+      if (hasHandledRef.current) return
+      hasHandledRef.current = true
+      setIsRedirecting(true)
+      createChat.mutateAsync({ title: 'New Chat' })
+        .then((chat) => {
+          localStorage.setItem(storageKey, chat.id)
+          navigate(`/chats/${chat.id}`, { replace: true })
+        })
+        .catch(() => {
+          setIsRedirecting(false)
+          hasHandledRef.current = false
+          toast({ title: 'Error', description: "Failed to create initial chat.", variant: 'destructive' })
+        })
+      return
     }
-  }, [isLoading, chats, navigate])
+
+    if (hasHandledRef.current) return
+
+    hasHandledRef.current = true
+    setIsRedirecting(true)
+    localStorage.setItem(storageKey, targetChat.id)
+    navigate(`/chats/${targetChat.id}`, { replace: true })
+  }, [isLoading, user, chats, createChat, navigate, toast])
 
   const handleCreate = async () => {
     try {
-      const chat = await createChat.mutateAsync({ title: 'New Knowledge Space' })
+      const chat = await createChat.mutateAsync({ title: 'New Chat' })
       navigate(`/chats/${chat.id}`)
     } catch {
       toast({ title: 'Error', description: 'Failed to create chat.', variant: 'destructive' })
     }
   }
 
-  if (isLoading) return null
+  if (isLoading || isRedirecting || createChat.isPending) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-3">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-blue-600/20 border border-primary/30 flex items-center justify-center animate-glow">
+          <RotateCw className="w-6 h-6 text-primary animate-spin" />
+        </div>
+        <p className="text-xs font-medium text-muted-foreground">Opening Knowledge Space...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex items-center justify-center">

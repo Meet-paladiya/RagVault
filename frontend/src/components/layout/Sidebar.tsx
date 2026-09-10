@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History, Sun, Moon, Trash2
+  Brain, MessageSquare, Plus, Search, LogOut, ChevronLeft, History, Sun, Moon, Trash2, Pencil, Check, X
 } from 'lucide-react'
-import { useChats, useCreateChat, useDeleteChat } from '@/api/chats'
+import { useChats, useCreateChat, useDeleteChat, useUpdateChat } from '@/api/chats'
 import { useAuthStore } from '@/store/authStore'
 import { useThemeStore } from '@/store/themeStore'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,9 @@ import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/components/ui/use-toast'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
+import { parseBackendDate } from '@/lib/utils'
 
 interface SidebarProps {
   collapsed: boolean
@@ -28,9 +30,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const createChat = useCreateChat()
   const deleteChat = useDeleteChat()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
+  const [editingChatId, setEditingChatId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const updateChat = useUpdateChat()
 
   const chats = chatsData?.chats ?? []
   const filtered = chats.filter((c) =>
@@ -38,23 +42,51 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   )
 
   const handleCreateChat = async () => {
-    if (!newTitle.trim()) return
     try {
-      const chat = await createChat.mutateAsync({ title: newTitle.trim() })
-      setNewTitle('')
-      setCreating(false)
+      const chat = await createChat.mutateAsync({ title: 'New Chat' })
       navigate(`/chats/${chat.id}`)
     } catch {
       toast({ title: 'Error', description: 'Failed to create chat.', variant: 'destructive' })
     }
   }
 
+  const startEditing = (event: React.MouseEvent, id: string, title: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setEditingChatId(id)
+    setEditingTitle(title)
+  }
+
+  const cancelEditing = (event: React.MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setEditingChatId(null)
+  }
+
+  const saveTitle = async (event?: React.MouseEvent | React.KeyboardEvent) => {
+    event?.preventDefault()
+    event?.stopPropagation()
+    if (!editingChatId || !editingTitle.trim()) return
+    try {
+      await updateChat.mutateAsync({ chatId: editingChatId, title: editingTitle.trim() })
+      setEditingChatId(null)
+    } catch {
+      toast({ title: 'Error', description: 'Failed to rename chat.', variant: 'destructive' })
+    }
+  }
+
   const handleDeleteChat = async (e: React.MouseEvent, id: string, title: string) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!confirm(`Are you sure you want to delete "${title}"?`)) return
+    if (!confirm(`Permanently delete "${title}" and all its documents, study notes, and quizzes?`)) return
     try {
-      await deleteChat.mutateAsync(id)
+      if (user?.id) {
+        const key = `ragvault-last-chat:${user.id}`
+        if (localStorage.getItem(key) === id) {
+          localStorage.removeItem(key)
+        }
+      }
+      await deleteChat.mutateAsync({ chatId: id, purge: true })
       toast({ description: `Deleted "${title}".` })
       if (chatId === id) {
         navigate('/chats')
@@ -65,6 +97,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }
 
   const handleLogout = () => {
+    queryClient.clear()
     clearAuth()
     navigate('/login')
   }
@@ -117,30 +150,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </div>
 
             {/* New Chat Button */}
-            {creating ? (
-              <div className="flex gap-1.5 mb-3">
-                <Input
-                  autoFocus
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreateChat(); if (e.key === 'Escape') setCreating(false) }}
-                  placeholder="Chat title..."
-                  className="h-8 text-xs bg-white/5 border-white/10 flex-1"
-                />
-                <Button size="sm" className="h-8 btn-gradient text-white border-0" onClick={handleCreateChat}>
-                  Add
-                </Button>
-              </div>
-            ) : (
-              <Button
-                onClick={() => setCreating(true)}
-                className="w-full h-8 text-xs btn-gradient text-white border-0 mb-3"
-                size="sm"
-              >
-                <Plus className="w-3.5 h-3.5 mr-1.5" />
-                New Chat
-              </Button>
-            )}
+            <Button onClick={handleCreateChat} className="w-full h-8 text-xs btn-gradient text-white border-0 mb-3" size="sm" disabled={createChat.isPending}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              New Chat
+            </Button>
           </motion.div>
         )}
 
@@ -148,36 +161,104 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ScrollArea className="flex-1 px-2">
           <div className="space-y-0.5 pb-2">
             {filtered.map((chat) => (
-              <Link key={chat.id} to={`/chats/${chat.id}`} className="block">
-                <motion.div
-                  whileHover={{ x: 2 }}
-                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer group transition-all duration-150 ${chatId === chat.id
-                    ? 'bg-primary/15 border-l-2 border-primary text-foreground'
-                    : 'hover:bg-white/5 text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
-                  {!collapsed && (
-                    <>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{chat.title}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(chat.updated_at), { addSuffix: true })}
+              <motion.div
+                key={chat.id}
+                whileHover={{ x: 2 }}
+                onClick={() => {
+                  if (editingChatId !== chat.id) {
+                    navigate(`/chats/${chat.id}`)
+                  }
+                }}
+                className={`flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer group transition-all duration-150 ${chatId === chat.id
+                  ? 'bg-primary/20 border-l-2 border-primary text-foreground'
+                  : 'hover:bg-white/5 text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <MessageSquare className="w-4 h-4 flex-shrink-0 text-primary/80" />
+                {!collapsed && (
+                  <>
+                    <div className="flex-1 min-w-0 pr-1">
+                      {editingChatId === chat.id ? (
+                        <Input
+                          autoFocus
+                          value={editingTitle}
+                          onChange={(event) => setEditingTitle(event.target.value)}
+                          onKeyDown={(event) => {
+                            event.stopPropagation()
+                            if (event.key === 'Enter') void saveTitle(event)
+                            if (event.key === 'Escape') setEditingChatId(null)
+                          }}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                          }}
+                          className="h-7 text-xs bg-white/10 border-primary/40 text-foreground"
+                          placeholder="Chat name"
+                        />
+                      ) : (
+                        <p className="text-xs font-medium truncate text-foreground/90 group-hover:text-foreground" title={chat.title}>
+                          {chat.title}
                         </p>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">
+                        {formatDistanceToNow(parseBackendDate(chat.updated_at), { addSuffix: true })}
+                      </p>
+                    </div>
+                    {editingChatId === chat.id ? (
+                      <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300"
+                          onClick={(event) => void saveTitle(event)}
+                          title="Save chat name"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+                          onClick={cancelEditing}
+                          title="Cancel rename"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-6 h-6 flex-shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                        onClick={(e) => handleDeleteChat(e, chat.id, chat.title)}
-                        title="Delete chat"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </>
-                  )}
-                </motion.div>
-              </Link>
+                    ) : (
+                      <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`w-7 h-7 transition-all ${chatId === chat.id
+                            ? 'bg-primary/20 text-primary hover:bg-primary/30'
+                            : 'bg-white/5 text-muted-foreground hover:bg-primary/20 hover:text-primary'
+                            }`}
+                          onClick={(event) => startEditing(event, chat.id, chat.title)}
+                          title="Rename chat"
+                          aria-label={`Rename ${chat.title}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`w-7 h-7 transition-all ${chatId === chat.id
+                            ? 'bg-destructive/20 text-destructive hover:bg-destructive/30'
+                            : 'bg-white/5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive'
+                            }`}
+                          onClick={(event) => handleDeleteChat(event, chat.id, chat.title)}
+                          title="Delete chat"
+                          aria-label={`Delete ${chat.title}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </motion.div>
             ))}
             {!collapsed && filtered.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-4">

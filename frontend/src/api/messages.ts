@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from './client'
 import { useAuthStore } from '@/store/authStore'
 import type { MessageListResponse } from '@/types'
@@ -11,6 +11,35 @@ export const useMessages = (chatId?: string) => {
       return res.data   // { messages: [...] }
     },
     enabled: !!chatId,
+    // Always refetch from DB when opening a chat — ensures full history shows (like ChatGPT)
+    refetchOnMount: 'always',
+    staleTime: 0,
+  })
+}
+
+export const useClearMessages = (chatId?: string) => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      if (!chatId) return
+      await api.delete(`/chats/${chatId}/messages`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] })
+    },
+  })
+}
+
+export const useDeleteMessage = (chatId?: string) => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      if (!chatId) return
+      await api.delete(`/chats/${chatId}/messages/${messageId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] })
+    },
   })
 }
 
@@ -44,7 +73,14 @@ export const streamMessage = async (
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      let detail = `HTTP ${response.status}: ${response.statusText}`
+      try {
+        const errorBody = await response.json()
+        if (typeof errorBody?.detail === 'string') detail = errorBody.detail
+      } catch {
+        // Keep the HTTP fallback when the response is not JSON.
+      }
+      throw new Error(detail)
     }
 
     const reader = response.body?.getReader()

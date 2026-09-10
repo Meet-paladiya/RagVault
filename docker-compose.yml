@@ -31,6 +31,7 @@ services:
     image: postgres:16-alpine
     container_name: hub_postgres
     restart: unless-stopped
+    command: postgres -c log_statement=none -c log_min_messages=warning
     networks:
       - hub_net
     environment:
@@ -58,6 +59,8 @@ services:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma_data
       - ANONYMIZED_TELEMETRY=FALSE
+      - CHROMA_LOG_LEVEL=WARNING
+      - UVICORN_LOG_LEVEL=warning
     volumes:
       - chroma_data:/chroma_data
     ports:

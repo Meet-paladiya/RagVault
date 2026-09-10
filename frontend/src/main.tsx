@@ -10,7 +10,12 @@ initTheme()
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      // Always fetch fresh from server — ensures chat history loads after login/logout
+      staleTime: 0,
+      // Keep data in cache for 5 minutes while navigating between chats
+      gcTime: 5 * 60 * 1000,
+      // Re-fetch when user switches back to tab (picks up new messages)
+      refetchOnWindowFocus: true,
       retry: 1,
     },
   },

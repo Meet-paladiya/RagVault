@@ -5,34 +5,33 @@ import { useQuizHistory } from '@/api/quiz'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { formatDistanceToNow } from 'date-fns'
+import { parseBackendDate } from '@/lib/utils'
 
 export function QuizPage() {
   const { data: chatsData } = useChats()
   const chats = chatsData?.chats ?? []
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-6 py-5 border-b border-white/10">
-        <div className="flex items-center gap-2">
+    <div className="h-full flex flex-col p-6 max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
           <History className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-semibold">Quiz History</h1>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">All your quiz results across knowledge spaces</p>
+        <div>
+          <h1 className="text-xl font-bold">Quiz History</h1>
+          <p className="text-xs text-muted-foreground">Review past quizzes and track progress across all knowledge spaces.</p>
+        </div>
       </div>
 
-      <ScrollArea className="flex-1 px-6 py-4">
-        {chats.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <History className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">No quizzes yet. Create a knowledge space and take a quiz!</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {chats.map((chat) => (
-              <ChatQuizSection key={chat.id} chatId={chat.id} chatTitle={chat.title} />
-            ))}
-          </div>
-        )}
+      <ScrollArea className="flex-1">
+        <div className="space-y-6 pr-2">
+          {chats.map((chat) => (
+            <ChatQuizSection key={chat.id} chatId={chat.id} chatTitle={chat.title} />
+          ))}
+          {chats.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-12">No knowledge spaces found.</p>
+          )}
+        </div>
       </ScrollArea>
     </div>
   )
@@ -64,7 +63,7 @@ function ChatQuizSection({ chatId, chatTitle }: { chatId: string; chatTitle: str
                     : pct >= 50 ? 'bg-primary/20 text-primary'
                       : 'bg-destructive/20 text-destructive'
                 }`}>
-
+                {pct != null ? `${pct}%` : '-'}
               </div>
 
               <div className="flex-1 min-w-0">
@@ -73,7 +72,7 @@ function ChatQuizSection({ chatId, chatTitle }: { chatId: string; chatTitle: str
                   {quiz.topic}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {quiz.total_questions} questions · {formatDistanceToNow(new Date(quiz.created_at), { addSuffix: true })}
+                  {quiz.total_questions} questions · {formatDistanceToNow(parseBackendDate(quiz.created_at), { addSuffix: true })}
                 </p>
                 {quiz.weak_topics && quiz.weak_topics.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1.5">

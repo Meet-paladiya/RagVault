@@ -18,6 +18,12 @@ from app.routers.messages import router as messages_router
 from app.routers.quiz import router as quiz_router
 from app.routers.notes import router as notes_router
 
+class EndpointFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find("/health") == -1
+
+logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -40,6 +46,11 @@ async def lifespan(app: FastAPI):
     # Create temp upload directory
     os.makedirs(cfg.upload_temp_dir, exist_ok=True)
     logger.info("Upload temp dir: %s", cfg.upload_temp_dir)
+
+    # Check Ollama model status in non-blocking background task
+    import asyncio
+    from app.utils.ollama_helper import check_and_pull_ollama_model
+    asyncio.create_task(check_and_pull_ollama_model())
 
     # NOTE: Embedding model and ChromaDB load lazily on first request.
     logger.info("API startup complete — ready to accept requests.")
