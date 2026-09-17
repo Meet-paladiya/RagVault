@@ -104,21 +104,251 @@ def parse_docx(path: str) -> List[Dict[str, Any]]:
     return pages
 
 def parse_pdf(path: str) -> List[Dict[str, Any]]:
-    """PyMuPDF page-by-page extraction."""
+    """
+    Hybrid PDF parser.
+
+    Strategy:
+    1. Try normal PyMuPDF text extraction first.
+    2. Decide whether the page contains meaningful digital text.
+    3. If the page looks scanned/image-based, run OCR.
+    4. OCR is performed only when necessary.
+    5. Supports mixed PDFs containing both digital and scanned pages.
+
+    This keeps normal PDFs fast while allowing scanned PDFs
+    to enter the existing chunking/embedding pipeline.
+    """
+
     import fitz
-    logger.info(f"Parsing PDF: {path}")
+    import pytesseract
+    from PIL import Image
+
+    logger.info("[PDF] Parsing PDF: %s", path)
+
     doc = fitz.open(path)
     pages = []
     source = os.path.basename(path)
+
+    # -----------------------------
+    # Helper: meaningful text check
+    # -----------------------------
+    def has_meaningful_text(text: str) -> bool:
+        """
+        Determine whether extracted PDF text is substantial enough
+        to trust as real page content.
+
+        We intentionally don't use a tiny fixed character threshold.
+        A page with a short heading can be legitimate text.
+        """
+
+        if not text:
+            return False
+
+        cleaned = " ".join(text.split())
+
+        # Count useful characters.
+        alphanumeric_count = sum(
+            char.isalnum()
+            for char in cleaned
+        )
+
+        # Count words.
+        words = cleaned.split()
+
+        # Digital page is considered meaningful if:
+        # - it has enough words, OR
+        # - it contains a reasonable amount of actual text.
+        return (
+            len(words) >= 5
+            or alphanumeric_count >= 40
+        )
+
+    # -----------------------------
+    # Helper: detect large images
+    # -----------------------------
+    def has_large_image(page) -> bool:
+        """
+        Detect whether a page contains a large image.
+
+        Scanned PDF pages are commonly stored as one large image
+        covering most of the page.
+        """
+
+        try:
+            page_area = abs(page.rect)
+
+            if page_area <= 0:
+                return False
+
+            image_infos = page.get_image_info()
+
+            for image_info in image_infos:
+                bbox = image_info.get("bbox")
+
+                if not bbox:
+                    continue
+
+                image_rect = fitz.Rect(bbox)
+
+                image_area = abs(image_rect)
+
+                coverage = image_area / page_area
+
+                # Large image covering most of the page
+                if coverage >= 0.50:
+                    return True
+
+        except Exception as exc:
+            logger.warning(
+                "[PDF] Image detection failed on page %d: %s",
+                page.number + 1,
+                exc,
+            )
+
+        return False
+
+    # -----------------------------
+    # Helper: perform OCR
+    # -----------------------------
+    def ocr_page(page) -> str:
+        """
+        Render the PDF page and run local Tesseract OCR.
+
+        200 DPI gives a good speed/accuracy balance for
+        normal scanned documents.
+        """
+
+        pix = page.get_pixmap(
+            dpi=200,
+            alpha=False
+        )
+
+        image = Image.frombytes(
+            "RGB",
+            [pix.width, pix.height],
+            pix.samples
+        )
+
+        text = pytesseract.image_to_string(
+            image,
+            lang="eng",
+            config="--psm 3",
+        )
+
+        return text.strip()
+
+    # -----------------------------
+    # Process pages
+    # -----------------------------
     for i in range(len(doc)):
+
         page = doc.load_page(i)
-        text = page.get_text()
+
+        # ---------------------------------
+        # Step 1: normal PDF text extraction
+        # ---------------------------------
+        extracted_text = page.get_text("text").strip()
+
+        meaningful_text = has_meaningful_text(
+            extracted_text
+        )
+
+        # ---------------------------------
+        # Step 2: inspect image content
+        # ---------------------------------
+        large_image = has_large_image(page)
+
+        # ---------------------------------
+        # Step 3: decide whether OCR needed
+        # ---------------------------------
+
+        if meaningful_text and not large_image:
+            # Normal digital PDF
+            text = extracted_text
+
+            logger.debug(
+                "[PDF] Page %d: digital text extraction",
+                i + 1,
+            )
+
+        elif meaningful_text and large_image:
+            # Important case:
+            #
+            # Some PDFs contain a scanned image AND
+            # a hidden OCR/text layer.
+            #
+            # Prefer the existing digital text because
+            # it is faster and usually cleaner.
+            text = extracted_text
+
+            logger.debug(
+                "[PDF] Page %d: text + image detected; "
+                "using existing text layer",
+                i + 1,
+            )
+
+        elif large_image:
+            # No useful text + large image
+            # => very likely scanned page.
+            logger.info(
+                "[OCR] Page %d appears to be scanned. "
+                "Running OCR...",
+                i + 1,
+            )
+
+            try:
+                text = ocr_page(page)
+
+                logger.info(
+                    "[OCR] Page %d: extracted %d characters",
+                    i + 1,
+                    len(text),
+                )
+
+            except Exception as exc:
+                logger.exception(
+                    "[OCR] Failed on page %d: %s",
+                    i + 1,
+                    exc,
+                )
+                text = ""
+
+        else:
+            # No meaningful text and no large image.
+            #
+            # Could be:
+            # - blank page
+            # - vector-based PDF
+            # - unusual PDF structure
+            #
+            # We don't OCR automatically because that would
+            # unnecessarily slow down many normal PDFs.
+            logger.debug(
+                "[PDF] Page %d: no meaningful text/image; "
+                "skipping OCR",
+                i + 1,
+            )
+
+            text = ""
+
+        # ---------------------------------
+        # Step 4: add page to pipeline
+        # ---------------------------------
         if text.strip():
+
             pages.append({
                 "text": text.strip(),
                 "page": i + 1,
-                "source": source
+                "source": source,
             })
+
+    doc.close()
+
+    logger.info(
+        "[PDF] Completed parsing: %d pages extracted from %s",
+        len(pages),
+        source,
+    )
+
     return pages
 
 def parse_pptx(path: str) -> List[Dict[str, Any]]:
