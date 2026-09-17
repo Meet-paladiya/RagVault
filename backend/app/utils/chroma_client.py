@@ -112,9 +112,11 @@ def query_collection(
     chat_id: str,
     query_embedding: list[float],
     k: int = 5,
+    max_distance: float | None = None,
 ) -> list[dict[str, Any]]:
     """
     Retrieve the top-k most similar chunks for a query embedding.
+    Optionally filter out chunks exceeding max_distance threshold.
 
     Returns:
         List of dicts: {text, source, page, chunk_index, document_id, distance}
@@ -141,6 +143,9 @@ def query_collection(
 
     candidates: list[dict[str, Any]] = []
     for doc_text, meta, dist in zip(docs, metas, dists):
+        dist_val = float(dist)
+        if max_distance is not None and dist_val > max_distance:
+            continue
         candidates.append(
             {
                 "text": doc_text,
@@ -148,7 +153,7 @@ def query_collection(
                 "page": meta.get("page", 0),
                 "chunk_index": meta.get("chunk_index", 0),
                 "document_id": meta.get("document_id", ""),
-                "distance": float(dist),
+                "distance": dist_val,
             }
         )
 

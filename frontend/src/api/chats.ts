@@ -35,7 +35,14 @@ export const useCreateChat = () => {
       const res = await api.post('/chats', data)
       return res.data
     },
-    onSuccess: () => {
+    onSuccess: (chat) => {
+      queryClient.setQueryData<ChatListResponse>(['chats'], (old) => {
+        if (!old) return { chats: [chat] }
+        return {
+          chats: [chat, ...old.chats.filter((c) => c.id !== chat.id)],
+        }
+      })
+      queryClient.setQueryData(['chat', chat.id], chat)
       queryClient.invalidateQueries({ queryKey: ['chats'] })
     },
   })
@@ -52,14 +59,20 @@ export const useDeleteChat = () => {
     },
     onSuccess: (_, payload) => {
       const chatId = typeof payload === 'string' ? payload : payload.chatId
-      queryClient.invalidateQueries({ queryKey: ['chats'] })
       if (chatId) {
+        queryClient.setQueryData<ChatListResponse>(['chats'], (old) => {
+          if (!old) return { chats: [] }
+          return {
+            chats: old.chats.filter((c) => c.id !== chatId),
+          }
+        })
         queryClient.removeQueries({ queryKey: ['chat', chatId] })
         queryClient.removeQueries({ queryKey: ['messages', chatId] })
         queryClient.removeQueries({ queryKey: ['documents', chatId] })
         queryClient.removeQueries({ queryKey: ['notes', chatId] })
         queryClient.removeQueries({ queryKey: ['remedial-notes', chatId] })
       }
+      queryClient.invalidateQueries({ queryKey: ['chats'] })
     },
   })
 }

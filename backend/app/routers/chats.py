@@ -12,6 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user, get_db
 from app.models.chat import Chat
 from app.models.document import Document
+from app.models.message import Message
+from app.models.quiz import Quiz
+from app.models.note import Note
+from app.models.memory import UserMemory
 from app.models.user import User
 from app.schemas.chat import ChatCreate, ChatListResponse, ChatResponse, ChatUpdate
 from app.utils.chroma_client import delete_collection
@@ -109,15 +113,23 @@ async def delete_chat(
 ) -> None:
     """
     Delete a knowledge space.
-    By default (purge=True), hard-deletes the chat and purges the ChromaDB vector collection.
-    If purge=False, soft-deletes the chat.
+    Hard-deletes or soft-deletes the chat and purges all documents and the ChromaDB vector collection.
     """
     chat = await _get_owned_chat(chat_id, current_user, db)
+    cid = _to_uuid(chat_id)
+    delete_collection(chat_id)
+
     if purge:
-        delete_collection(chat_id)
+        await db.execute(delete(Message).where(Message.chat_id == cid))
+        await db.execute(delete(Document).where(Document.chat_id == cid))
+        await db.execute(delete(Quiz).where(Quiz.chat_id == cid))
+        await db.execute(delete(Note).where(Note.chat_id == cid))
+        await db.execute(delete(UserMemory).where(UserMemory.source_chat_id == cid))
         await db.delete(chat)
     else:
         chat.is_deleted = True
+        await db.execute(delete(Document).where(Document.chat_id == cid))
+
     await db.commit()
 
 

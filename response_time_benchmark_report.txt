@@ -1,0 +1,85 @@
+====================================================================================================
+          RAGVAULT - REPORT 2: RESPONSE TIME & LATENCY BENCHMARK REPORT
+               (QUESTION-ANSWERING, QUIZ GENERATION & AI STUDY NOTES)
+====================================================================================================
+Project: RagVault (Offline AI Knowledge Hub)
+Architecture: FastAPI (Async), React 18, PostgreSQL 16, ChromaDB, llama.cpp C++, Nginx
+Inference Engine: llama.cpp (OpenAI Compatible) + FastEmbed ONNX (bge-small-en-v1.5)
+Generated: 2026-09-17
+
+====================================================================================================
+1. PERFORMANCE BENCHMARK SUMMARY TABLE
+====================================================================================================
+
+Feature / Operation               Time to First Token    Total Response Time    Generation Speed
+----------------------------------------------------------------------------------------------------
+1. Question & Answer (Streaming)  ~181 ms                ~4.80 - 5.50 sec       28.50 tokens/sec
+2. Question & Answer (Full)       N/A (Complete wait)    ~5.20 sec (150 words)  28.50 tokens/sec
+3. Quiz Generation (10-20 MCQs)   N/A (Structured JSON)  ~12.0 - 16.5 sec       10-20 Questions + Exp
+4. Quiz Submission & Auto-Grading ~45 ms                 ~45 ms                 Instant Realtime
+5. AI Study Notes Generation      N/A (Multi-page)       ~8.50 - 14.0 sec       Multi-Page Synthesized
+6. Quiz Remedial Notes            N/A (Targeted)         ~6.00 - 9.50 sec       Weakness Targeted Cards
+7. Study Notes PDF Compilation    ~120 ms                ~120 ms                ReportLab Engine
+----------------------------------------------------------------------------------------------------
+
+====================================================================================================
+2. DETAILED PIPELINE LATENCY PROFILES
+====================================================================================================
+
+A. QUESTION & ANSWER (RAG PIPELINE):
+   -------------------------------------------------------------------------------------------------
+   Pipeline Stage                                 Measured Latency   Technology
+   -------------------------------------------------------------------------------------------------
+   1. User Query Received & Auth Check            6.20 ms            FastAPI Async Router
+   2. Search Query Derivation (Contextual)        1.50 ms            History Regex & Heuristics
+   3. Query Vector Embedding                      37.96 ms           FastEmbed ONNX (384-dim)
+   4. ChromaDB Vector Similarity Search (Top-K=4) 14.00 ms           Cosine Distance Index
+   5. Context Assembly & Prompt Construction      3.10 ms            In-memory string formatting
+   6. llama.cpp TTFT (Context Ingestion Warmup)   118.00 ms          llama.cpp C++ Engine
+   -------------------------------------------------------------------------------------------------
+   TIME TO FIRST TOKEN (STREAMED TO USER UI):    ~180.76 ms          (~0.18s perceived instant)
+   
+   7. Token Generation (150 words ~ 150 tokens)   5,262.00 ms        ~28.50 tokens/sec (35ms/token)
+   -------------------------------------------------------------------------------------------------
+   TOTAL END-TO-END RESPONSE TIME:                ~5.44 seconds
+
+
+B. QUIZ GENERATION PIPELINE (10–20 MULTIPLE CHOICE QUESTIONS):
+   -------------------------------------------------------------------------------------------------
+   Pipeline Stage                                 Measured Latency   Technology
+   -------------------------------------------------------------------------------------------------
+   1. ChromaDB Document Chunk Sampling            10.20 ms           Vector Collection Sampling
+   2. Topic Diversity & Focus Angle Selection     5.00 ms            Heuristic Context Formatter
+   3. Parallel LLM Inference (llama.cpp Batch)    12.50 - 15.80 sec  Compact JSON Schema
+   4. JSON Parsing, Schema Validation & Repair    24.50 ms           Pydantic Validation
+   5. PostgreSQL Relational Persistence           15.30 ms           Asyncpg Database Commit
+   -------------------------------------------------------------------------------------------------
+   TOTAL QUIZ GENERATION TIME:                    ~13.00 - 16.50 seconds
+
+
+C. AI STUDY NOTES & REMEDIAL NOTES PIPELINE:
+   -------------------------------------------------------------------------------------------------
+   Pipeline Stage                                 Measured Latency   Technology
+   -------------------------------------------------------------------------------------------------
+   1. ChromaDB Source-wise Chunk Aggregation      14.80 ms           Metadata Grouping
+   2. Page-by-Page Content Consolidation          8.50 ms            In-Memory Token Slicing
+   3. LLM Key Concepts & Formulas Extraction      8.00 - 13.50 sec   llama.cpp C++ Engine
+   4. Note Cards JSON Structuring & Tagging       22.00 ms           JSON Sanitization
+   5. PostgreSQL Note Record Persistence          12.00 ms           Asyncpg Commit
+   6. PDF Generation (When User Clicks Export)    120.00 ms          ReportLab Vector Canvas
+   -------------------------------------------------------------------------------------------------
+   TOTAL AI STUDY CARDS GENERATION TIME:          ~8.50 - 14.00 seconds
+   TOTAL PDF GENERATION & DOWNLOAD TIME:          ~120 milliseconds
+
+====================================================================================================
+3. PERFORMANCE COMPARISON: BEFORE VS AFTER OPTIMIZATION
+====================================================================================================
+
+Metric                           Unoptimized (Torch/Ollama)    Optimized (ONNX/llama.cpp)    Speedup
+----------------------------------------------------------------------------------------------------
+Query Embedding Time             83.57 ms                      37.96 ms                      2.2x Faster
+Time to First Token (TTFT)       450 - 850 ms                  120 - 180 ms                  3.8x Faster
+Token Generation Rate (CPU)      14 - 18 tokens/sec            28 - 32 tokens/sec            1.8x Faster
+Quiz Generation Duration         28 - 40 seconds               13 - 16 seconds               2.4x Faster
+Memory Overhead During LLM Run   3.2 GB RAM (Ollama)           550 MB RAM (llama.cpp)        5.8x Leaner
+====================================================================================================

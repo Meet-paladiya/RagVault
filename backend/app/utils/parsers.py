@@ -5,12 +5,14 @@ import os
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {
-    ".pdf", ".pptx", ".txt", ".md", ".docx",
+    ".pdf", ".pptx", ".ppt", ".txt", ".md", ".docx", ".doc",
+    ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff",
     ".mp4", ".mkv", ".mov", ".avi", ".webm",
     ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"
 }
 
 TEXT_EXTENSIONS = {".txt", ".md"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
 
@@ -19,12 +21,14 @@ def parse_file(path: str) -> List[Dict[str, Any]]:
     ext = os.path.splitext(path)[1].lower()
     if ext == ".pdf":
         return parse_pdf(path)
-    elif ext == ".pptx":
+    elif ext in {".pptx", ".ppt"}:
         return parse_pptx(path)
     elif ext in TEXT_EXTENSIONS:
         return parse_text(path)
-    elif ext == ".docx":
+    elif ext in {".docx", ".doc"}:
         return parse_docx(path)
+    elif ext in IMAGE_EXTENSIONS:
+        return parse_image(path)
     elif ext in AUDIO_EXTENSIONS:
         return parse_audio(path)
     elif ext in VIDEO_EXTENSIONS:
@@ -414,21 +418,93 @@ def parse_audio(path: str) -> List[Dict[str, Any]]:
     source = os.path.basename(path)
     return _transcribe_with_whisper(path, source)
 
+def parse_image(path: str) -> List[Dict[str, Any]]:
+    """Extract text from standalone images (PNG, JPG, WEBP, BMP, TIFF) using Tesseract OCR."""
+    from PIL import Image, ImageEnhance
+    import pytesseract
+    source = os.path.basename(path)
+    logger.info(f"[IMAGE] Parsing image with OCR: {path}")
+
+    try:
+        image = Image.open(path)
+        if image.mode not in ("L", "RGB"):
+            image = image.convert("RGB")
+
+        # Contrast enhancement for crisp text OCR
+        enhancer = ImageEnhance.Contrast(image)
+        enhanced_image = enhancer.enhance(1.4)
+
+        text = pytesseract.image_to_string(enhanced_image, lang="eng", config="--psm 3").strip()
+        if not text:
+            # Fallback with raw image and PSM 6 (single uniform block of text)
+            text = pytesseract.image_to_string(image, lang="eng", config="--psm 6").strip()
+
+        if not text:
+            logger.warning(f"[IMAGE] No legible text extracted from {source}")
+            return []
+
+        logger.info(f"[IMAGE] Successfully extracted {len(text)} chars from {source}")
+        return [{"text": text, "page": 1, "source": source}]
+    except Exception as exc:
+        logger.exception(f"[IMAGE] Failed to OCR image {source}: {exc}")
+        return []
+
 def parse_video(path: str) -> List[Dict[str, Any]]:
-    """Extract audio with ffmpeg then transcribe."""
+    """Extract audio from video file with ffmpeg (or PyAV fallback) and transcribe with Whisper."""
     import subprocess, tempfile
     source = os.path.basename(path)
-    logger.info(f"Extracting audio from video: {path}")
+    logger.info(f"[VIDEO] Extracting audio from video: {path}")
     
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         audio_path = tmp.name
         
+    extracted = False
     try:
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_path],
-            check=True, capture_output=True
-        )
+        # Strategy 1: Try ffmpeg CLI (Fastest, direct pcm_s16le 16kHz mono extraction)
+        try:
+            res = subprocess.run(
+                ["ffmpeg", "-y", "-i", path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_path],
+                check=True, capture_output=True
+            )
+            if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
+                extracted = True
+        except Exception as ffmpeg_err:
+            logger.warning(f"[VIDEO] ffmpeg CLI execution failed: {ffmpeg_err}")
+
+        # Strategy 2: Fallback to PyAV (pure Python FFmpeg binding) if CLI binary is unavailable
+        if not extracted:
+            try:
+                import av
+                container = av.open(path)
+                audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
+                if audio_stream:
+                    output_container = av.open(audio_path, 'w', format='wav')
+                    out_stream = output_container.add_stream('pcm_s16le', rate=16000)
+                    out_stream.channels = 1
+                    
+                    resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+                    for frame in container.decode(audio_stream):
+                        for resampled_frame in resampler.resample(frame):
+                            for packet in out_stream.encode(resampled_frame):
+                                output_container.mux(packet)
+                    for packet in out_stream.encode(None):
+                        output_container.mux(packet)
+                    output_container.close()
+                    container.close()
+                    if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
+                        extracted = True
+            except Exception as av_err:
+                logger.warning(f"[VIDEO] PyAV fallback audio extraction failed: {av_err}")
+
+        # Strategy 3: Directly pass original video file to Whisper as last resort
+        if not extracted:
+            logger.info(f"[VIDEO] Attempting direct Whisper transcription for {path}")
+            return _transcribe_with_whisper(path, source)
+
         return _transcribe_with_whisper(audio_path, source)
     finally:
         if os.path.exists(audio_path):
-            os.unlink(audio_path)
+            try:
+                os.unlink(audio_path)
+            except Exception:
+                pass

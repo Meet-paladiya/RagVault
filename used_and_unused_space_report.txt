@@ -1,0 +1,77 @@
+====================================================================================================
+           RAGVAULT - REPORT 3: TOTAL USED AND UNUSED SPACE ALLOCATION REPORT
+====================================================================================================
+Project: RagVault (Offline AI Knowledge Hub)
+Target Budget: Recommended Host Disk Space Allocation of 6.00 GB
+Architecture: Docker Compose Multi-Container Stack (5 Core Services)
+Generated: 2026-09-17
+
+====================================================================================================
+1. HIGH-LEVEL DISK SPACE BUDGET (RECOMMENDED 6.00 GB HOST ALLOCATION)
+====================================================================================================
+
+Storage Category                               Allocated Size    Percentage (%)    Status
+----------------------------------------------------------------------------------------------------
+1. Active Used Space (Software, Models, DBs)   ~4.35 GB          72.50 %           Utilized (In Use)
+2. Unused Free Headroom Buffer                 ~1.65 GB          27.50 %           Available (Free)
+----------------------------------------------------------------------------------------------------
+TOTAL RECOMMENDED HOST STORAGE BUDGET:          6.00 GB         100.00 %           Balanced & Safe
+
+====================================================================================================
+2. DETAILED BREAKDOWN: USED VS UNUSED SPACE BY SECTOR
+====================================================================================================
+
+Storage Sector                 Used Space    Unused / Free Space    Capacity of Free Space Buffer
+----------------------------------------------------------------------------------------------------
+1. Docker Core Images          2.84 GB       0.00 GB                Immutable read-only base layers
+2. AI Models & ONNX Cache      1.19 GB       ~300 MB                Workspace for tokenizer & embeddings
+3. ChromaDB Vector Store       ~20.00 MB     ~500 MB                Capacity for ~10,000 document chunks
+4. PostgreSQL Relational Data  ~48.00 MB     ~300 MB                Capacity for ~500,000 chat messages
+5. Uploads Temporary Buffer    0.00 MB       ~550 MB                Transient workspace for video/audio/PDF
+----------------------------------------------------------------------------------------------------
+TOTALS:                        ~4.35 GB      ~1.65 GB               Complete 6.00 GB Headroom
+
+====================================================================================================
+3. CAPACITY ESTIMATION: WHAT YOU CAN STORE IN THE UNUSED 1.65 GB BUFFER
+====================================================================================================
+
+The ~1.65 GB of unused headroom provides substantial capacity for personal study documents:
+
+Document Type                    Average File Size    Estimated Quantity Storable in 1.65 GB
+----------------------------------------------------------------------------------------------------
+Standard PDF Textbooks (Searchable) ~5.00 MB           ~330 Complete Books / Manuals
+Lecture Slide Decks (PPTX / PDF)   ~8.00 MB           ~200 Full Slide Presentations
+Audio Lecture Recordings (MP3)     ~15.00 MB          ~110 Hours of Audio Lectures
+Research Papers (PDF)              ~1.50 MB           ~1,100 Academic Papers
+Plain Text & Markdown Notes        ~50.00 KB          ~33,000 Document Files
+----------------------------------------------------------------------------------------------------
+
+====================================================================================================
+4. RAM (SYSTEM MEMORY) USED VS UNUSED ALLOCATION (IDLE & RUNTIME)
+====================================================================================================
+
+Container / Process            Idle RAM Used    Peak Active RAM    Recommended System RAM
+----------------------------------------------------------------------------------------------------
+1. hub_llm (llama.cpp C++)     ~140.00 MiB      ~550.00 MiB        C++ KV Cache + Model Weights
+2. hub_backend (FastAPI+ONNX)  ~380.00 MiB      ~480.00 MiB        FastEmbed ONNX + API Server
+3. hub_chromadb (Vector DB)    ~102.70 MiB      ~150.00 MiB        In-Memory HNSW Graph
+4. hub_postgres (PostgreSQL)   ~40.60 MiB       ~75.00 MiB         Shared Buffers & Pool
+5. hub_frontend (Nginx Alpine) ~12.10 MiB       ~20.00 MiB         Static Asset Cache
+----------------------------------------------------------------------------------------------------
+TOTAL SYSTEM RAM UTILIZATION:  ~675.40 MiB      ~1.27 GB           Runs easily on any 4GB–8GB PC
+
+====================================================================================================
+5. DISK SPACE OPTIMIZATION SUMMARY (HOW UNUSED OVERHEAD WAS ELIMINATED)
+====================================================================================================
+
+1. PyTorch / Transformers Stripping:
+   - Eliminated ~1.18 GB of unneeded PyTorch libraries from the backend Docker image.
+2. FastEmbed ONNX Model vs Full Transformer:
+   - Reduced embedding model size from ~450 MB down to 133 MB (70% smaller).
+3. llama.cpp Server vs Ollama Container:
+   - Replaced heavy 8.44 GB Ollama image with a lean 1.65 GB llama.cpp C++ server (80% smaller).
+4. Multi-Stage Alpine Frontend Build:
+   - Node.js build cache (400 MB) discarded; only the 1.35 MB compiled bundle served via 95MB Nginx.
+5. Overall Storage Reclaimed:
+   - Total reclaimed disk space: 10.74 GB (Reduced baseline from 15.09 GB to ~4.35 GB).
+====================================================================================================

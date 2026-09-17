@@ -1,16 +1,23 @@
 import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
-import { UploadCloud, FileText, Presentation, Video, Music, FileCode } from 'lucide-react'
+import { UploadCloud, FileText, Presentation, Video, Music, FileCode, ImageIcon } from 'lucide-react'
 import { useUploadDocument } from '@/api/documents'
 import { useToast } from '@/components/ui/use-toast'
 
 const ACCEPTED_TYPES: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+  'application/vnd.ms-powerpoint': ['.ppt'],
   'text/plain': ['.txt', '.md'],
   'text/markdown': ['.md'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/msword': ['.doc'],
+  'image/png': ['.png'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/webp': ['.webp'],
+  'image/bmp': ['.bmp'],
+  'image/tiff': ['.tiff'],
   'video/mp4': ['.mp4'], 'video/x-matroska': ['.mkv'], 'video/quicktime': ['.mov'],
   'video/x-msvideo': ['.avi'], 'video/webm': ['.webm'],
   'audio/mpeg': ['.mp3'], 'audio/wav': ['.wav'], 'audio/mp4': ['.m4a'],
@@ -22,6 +29,7 @@ const FILE_LABELS = [
   { icon: Presentation, label: 'PPTX', color: 'text-orange-400' },
   { icon: FileCode, label: 'TXT/MD', color: 'text-cyan-400' },
   { icon: FileText, label: 'DOCX', color: 'text-indigo-400' },
+  { icon: ImageIcon, label: 'Image', color: 'text-pink-400' },
   { icon: Video, label: 'Video', color: 'text-blue-400' },
   { icon: Music, label: 'Audio', color: 'text-green-400' },
 ]
@@ -40,7 +48,7 @@ export function DropZone({ chatId }: DropZoneProps) {
         const names = rejectedFiles.map((r) => r.file.name).join(', ')
         toast({
           title: 'Unsupported file type',
-          description: `${names} — only PDF, PPTX, video, and audio files are accepted.`,
+          description: `${names} — please upload PDF, PPTX, DOCX, TXT/MD, Image, Video, or Audio files.`,
           variant: 'destructive',
         })
       }

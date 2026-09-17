@@ -2,9 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Tesseract OCR
+# Install Tesseract OCR and FFmpeg for multimedia decoding
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip

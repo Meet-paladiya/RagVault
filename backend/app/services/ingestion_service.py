@@ -30,7 +30,7 @@ def _validate_extension(filename: str) -> str:
     if ext not in SUPPORTED_EXTENSIONS:
         raise ValueError(
             f"File type '{ext}' is not supported. "
-            f"Accepted types: PDF, PPTX, TXT, MD, DOCX, MP4/MKV/MOV/AVI/WEBM, MP3/WAV/M4A/OGG/FLAC/AAC."
+            f"Accepted types: PDF, PPTX/PPT, DOCX/DOC, TXT/MD, Images (PNG/JPG/WEBP/BMP/TIFF), Video (MP4/MKV/MOV/AVI/WEBM), Audio (MP3/WAV/M4A/OGG/FLAC/AAC)."
         )
     return ext
 

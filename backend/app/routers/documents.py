@@ -35,7 +35,7 @@ async def _verify_chat_ownership(chat_id: str, user: User, db: AsyncSession) -> 
     cid = _to_uuid(chat_id)
     result = await db.execute(select(Chat).where(Chat.id == cid))
     chat = result.scalar_one_or_none()
-    if not chat:
+    if not chat or chat.is_deleted:
         raise HTTPException(status_code=404, detail="Chat not found.")
     if str(chat.user_id) != str(user.id):
         raise HTTPException(status_code=403, detail="Access denied.")

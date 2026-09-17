@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
-import type { Quiz, QuizResult } from '@/types'
+import type { Quiz, QuizResult, ChatListResponse } from '@/types'
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error) && typeof error.response?.data?.detail === 'string') {
@@ -37,13 +37,31 @@ export function ChatDetailPage() {
   const { chatId } = useParams<{ chatId: string }>()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const queryClient = useQueryClient()
   const { data: chatData, isError: isChatError } = useChat(chatId!)
 
   useEffect(() => {
-    if (isChatError) {
+    if (chatData) {
+      queryClient.setQueryData<ChatListResponse>(['chats'], (old) => {
+        if (!old) return { chats: [chatData] }
+        if (!old.chats.some((c) => c.id === chatData.id)) {
+          return { chats: [chatData, ...old.chats] }
+        }
+        return old
+      })
+    }
+  }, [chatData, queryClient])
+
+  useEffect(() => {
+    if (isChatError && chatId) {
+      queryClient.removeQueries({ queryKey: ['chat', chatId] })
+      queryClient.removeQueries({ queryKey: ['documents', chatId] })
+      queryClient.removeQueries({ queryKey: ['messages', chatId] })
+      queryClient.removeQueries({ queryKey: ['notes', chatId] })
+      queryClient.removeQueries({ queryKey: ['remedial-notes', chatId] })
       navigate('/chats', { replace: true })
     }
-  }, [isChatError, navigate])
+  }, [isChatError, chatId, navigate, queryClient])
 
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -94,7 +112,6 @@ export function ChatDetailPage() {
   const updateChat = useUpdateChat()
   const deleteChat = useDeleteChat()
   const { toast } = useToast()
-  const queryClient = useQueryClient()
 
   const [streamingContent, setStreamingContent] = useState<string | null>(null)
   const [optimisticUserMessage, setOptimisticUserMessage] = useState<string | null>(null)

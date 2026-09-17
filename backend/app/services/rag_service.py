@@ -16,7 +16,7 @@ from typing import Any, AsyncGenerator, TypedDict
 import httpx
 from langgraph.graph import END, StateGraph
 
-from app.utils.chroma_client import query_collection
+from app.utils.chroma_client import query_collection, get_or_create_collection
 from app.utils.embedder import embed_single
 from app.services.llm_gate import ollama_generation_gate
 
@@ -24,8 +24,13 @@ logger = logging.getLogger(__name__)
 
 NO_DOCS_MESSAGE = (
     "📄 **No relevant documents found in this Knowledge Space.**\n\n"
-    "Please upload documents (PDF, PPTX, Video, or Audio) to this space using the sidebar. "
+    "Please upload documents (PDF, PPTX, Word, Images, Video, or Audio) to this space using the sidebar. "
     "Once uploaded, I will answer your questions strictly using the information in your documents."
+)
+
+NOT_FOUND_MESSAGE = (
+    "I cannot find sufficient information in your uploaded documents to answer this question. "
+    "Please check your uploaded files or upload additional relevant material."
 )
 
 
@@ -80,15 +85,18 @@ def embed_question_node(state: RAGState) -> RAGState:
 
 
 def retrieve_chunks_node(state: RAGState) -> RAGState:
-    """Node 2: Retrieve top-k similar chunks from the chat's ChromaDB collection."""
-    logger.debug("[RAG] Retrieving chunks (top_k=%d)", state["top_k"])
+    """Node 2: Retrieve top-k similar chunks from the chat's ChromaDB collection within max_distance."""
+    from app.config import get_settings
+    cfg = get_settings()
+    logger.debug("[RAG] Retrieving chunks (top_k=%d, max_dist=%.2f)", state["top_k"], cfg.rag_max_distance)
     chunks = query_collection(
         chat_id=state["chat_id"],
         query_embedding=state["query_embedding"],
         k=state["top_k"],
+        max_distance=cfg.rag_max_distance,
     )
     state["retrieved_chunks"] = chunks
-    logger.info("[RAG] Retrieved %d chunks", len(chunks))
+    logger.info("[RAG] Retrieved %d chunks meeting distance threshold <= %.2f", len(chunks), cfg.rag_max_distance)
     return state
 
 
@@ -111,14 +119,16 @@ def _build_prompt(state: RAGState) -> str:
         history_lines.append(f"{role}: {msg['content']}")
     history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
 
-    return f"""You are RagVault, an expert document-grounded AI assistant.
-Your task is to provide comprehensive, accurate, and direct answers to questions based ONLY on the provided context excerpts from uploaded documents.
+    return f"""You are RagVault, a strict document-grounded AI knowledge assistant.
 
-GUIDELINES:
-1. Ground your answer thoroughly in the facts, details, and explanations provided in the CONTEXT below.
-2. Structure your response clearly using Markdown (bullet points, bold text, headings, or numbered steps where appropriate).
-3. When presenting specific facts, reference the source like [Source: <filename>, Page: <page>].
-4. If the provided context does not contain enough information to answer the question, clearly state: "I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
+CRITICAL INSTRUCTIONS:
+1. Answer the user's question ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts below.
+2. ABSOLUTELY NEVER use outside knowledge, general pre-trained knowledge, or assumptions.
+3. If the provided CONTEXT does not explicitly contain the answer to the user's question, you MUST reply EXACTLY with:
+"I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
+4. Do NOT answer questions about physics, science, math, history, or external trivia unless that topic is explicitly described in the CONTEXT below.
+5. If the user asks for examples or explanations, only provide examples that are explicitly stated in the CONTEXT below. Never invent external examples.
+6. Reference facts using inline citations like [Source: <filename>, Page: <page>].
 
 === CONTEXT FROM UPLOADED DOCUMENTS ===
 {state['context']}
@@ -136,8 +146,15 @@ def generate_answer_node(state: RAGState) -> RAGState:
     """Node 4: Call LLM with the assembled prompt (non-streaming path)."""
     from app.config import get_settings
 
-    if not state.get("retrieved_chunks") or not state.get("context"):
+    collection = get_or_create_collection(state["chat_id"])
+    if not collection or collection.count() == 0:
         state["answer"] = NO_DOCS_MESSAGE
+        state["citations"] = []
+        return state
+
+    if not state.get("retrieved_chunks") or not state.get("context"):
+        state["answer"] = NOT_FOUND_MESSAGE
+        state["citations"] = []
         return state
 
     cfg = get_settings()
@@ -266,18 +283,28 @@ async def stream_rag(
 
     cfg = get_settings()
 
-    # ── Steps 1-2: embed → retrieve ───
+    # ── Guard: Check if collection has documents at all ───────────────────────
+    collection = get_or_create_collection(chat_id)
+    doc_count = collection.count() if collection else 0
+    if doc_count == 0:
+        yield f"data: {json.dumps({'token': NO_DOCS_MESSAGE})}\n\n"
+        yield f"data: {json.dumps({'citations': []})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+
+    # ── Steps 1-2: embed → retrieve with strict max_distance threshold ───────
     search_query = _derive_search_query(question, chat_history)
     query_embedding = embed_single(search_query)
     retrieved_chunks = query_collection(
         chat_id=chat_id,
         query_embedding=query_embedding,
         k=cfg.top_k,
+        max_distance=cfg.rag_max_distance,
     )
 
-    # ── Guard: If no documents or chunks exist, ask user to upload ────────────
+    # ── Guard: If no relevant chunks meet the similarity threshold ────────────
     if not retrieved_chunks:
-        yield f"data: {json.dumps({'token': NO_DOCS_MESSAGE})}\n\n"
+        yield f"data: {json.dumps({'token': NOT_FOUND_MESSAGE})}\n\n"
         yield f"data: {json.dumps({'citations': []})}\n\n"
         yield "data: [DONE]\n\n"
         return
@@ -297,14 +324,16 @@ async def stream_rag(
         history_lines.append(f"{role}: {msg['content']}")
     history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
 
-    prompt = f"""You are RagVault, an expert document-grounded AI assistant.
-Your task is to provide comprehensive, accurate, and direct answers to questions based ONLY on the provided context excerpts from uploaded documents.
+    prompt = f"""You are RagVault, a strict document-grounded AI knowledge assistant.
 
-GUIDELINES:
-1. Ground your answer thoroughly in the facts, details, and explanations provided in the CONTEXT below.
-2. Structure your response clearly using Markdown (bullet points, bold text, headings, or numbered steps where appropriate).
-3. When presenting specific facts, reference the source like [Source: <filename>, Page: <page>].
-4. If the provided context does not contain enough information to answer the question, clearly state: "I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
+CRITICAL INSTRUCTIONS:
+1. Answer the user's question ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts below.
+2. ABSOLUTELY NEVER use outside knowledge, general pre-trained knowledge, or assumptions.
+3. If the provided CONTEXT does not explicitly contain the answer to the user's question, you MUST reply EXACTLY with:
+"I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
+4. Do NOT answer questions about physics, science, math, history, or external trivia unless that topic is explicitly described in the CONTEXT below.
+5. If the user asks for examples or explanations, only provide examples that are explicitly stated in the CONTEXT below. Never invent external examples.
+6. Reference facts using inline citations like [Source: <filename>, Page: <page>].
 
 === CONTEXT FROM UPLOADED DOCUMENTS ===
 {context}
@@ -320,6 +349,7 @@ GUIDELINES:
     # ── Step 4: Stream tokens from LLM with temperature=0.0 (Strict Grounding)
     logger.info("[RAG:stream] Streaming response from local LLM at %s", cfg.llm_base_url)
 
+    full_response_text: list[str] = []
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
@@ -349,6 +379,7 @@ GUIDELINES:
                             delta = chunk_data.get("choices", [{}])[0].get("delta", {})
                             token = delta.get("content", "")
                             if token:
+                                full_response_text.append(token)
                                 yield f"data: {json.dumps({'token': token})}\n\n"
                         except Exception:
                             continue
@@ -361,13 +392,17 @@ GUIDELINES:
         yield f"data: {json.dumps({'token': err_msg})}\n\n"
 
     # ── Step 5: Emit deduplicated citations as metadata event ─────────────────
-    seen: set[tuple[str, int]] = set()
-    citations: list[dict[str, Any]] = []
-    for chunk in retrieved_chunks:
-        key = (chunk["source"], chunk["page"])
-        if key not in seen:
-            seen.add(key)
-            citations.append({"source": chunk["source"], "page": chunk["page"]})
+    complete_text = "".join(full_response_text).lower()
+    if "cannot find sufficient information" in complete_text or "no relevant documents" in complete_text:
+        citations: list[dict[str, Any]] = []
+    else:
+        seen: set[tuple[str, int]] = set()
+        citations = []
+        for chunk in retrieved_chunks:
+            key = (chunk["source"], chunk["page"])
+            if key not in seen:
+                seen.add(key)
+                citations.append({"source": chunk["source"], "page": chunk["page"]})
 
     yield f"data: {json.dumps({'citations': citations})}\n\n"
     yield "data: [DONE]\n\n"
