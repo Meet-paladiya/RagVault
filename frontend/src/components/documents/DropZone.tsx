@@ -8,7 +8,12 @@ import { useToast } from '@/components/ui/use-toast'
 const ACCEPTED_TYPES: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-  'application/vnd.ms-powerpoint': ['.ppt'],
+  'application/vnd.ms-powerpoint': ['.ppt', '.pot', '.pps'],
+  'application/x-mspowerpoint': ['.ppt', '.pptx'],
+  'application/mspowerpoint': ['.ppt'],
+  'application/powerpoint': ['.ppt'],
+  'application/x-powerpoint': ['.ppt'],
+  'application/x-dos_ms_powerpoint': ['.ppt'],
   'text/plain': ['.txt', '.md'],
   'text/markdown': ['.md'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
@@ -24,9 +29,16 @@ const ACCEPTED_TYPES: Record<string, string[]> = {
   'audio/ogg': ['.ogg'], 'audio/flac': ['.flac'], 'audio/aac': ['.aac'],
 }
 
+const SUPPORTED_EXTS = [
+  '.pdf', '.pptx', '.ppt', '.txt', '.md', '.docx', '.doc',
+  '.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff',
+  '.mp4', '.mkv', '.mov', '.avi', '.webm',
+  '.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac'
+]
+
 const FILE_LABELS = [
   { icon: FileText, label: 'PDF', color: 'text-red-400' },
-  { icon: Presentation, label: 'PPTX', color: 'text-orange-400' },
+  { icon: Presentation, label: 'PPT / PPTX', color: 'text-orange-400' },
   { icon: FileCode, label: 'TXT/MD', color: 'text-cyan-400' },
   { icon: FileText, label: 'DOCX', color: 'text-indigo-400' },
   { icon: ImageIcon, label: 'Image', color: 'text-pink-400' },
@@ -44,15 +56,29 @@ export function DropZone({ chatId }: DropZoneProps) {
 
   const onDrop = useCallback(
     async (acceptedFiles: File[], rejectedFiles: any[]) => {
-      if (rejectedFiles.length > 0) {
-        const names = rejectedFiles.map((r) => r.file.name).join(', ')
+      const validFiles: File[] = [...acceptedFiles]
+      const actualRejected: any[] = []
+
+      // If browser MIME detection failed for valid extensions like .ppt, rescue them
+      for (const rej of rejectedFiles) {
+        const file = rej.file
+        const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
+        if (SUPPORTED_EXTS.includes(ext)) {
+          validFiles.push(file)
+        } else {
+          actualRejected.push(rej)
+        }
+      }
+
+      if (actualRejected.length > 0) {
+        const names = actualRejected.map((r) => r.file.name).join(', ')
         toast({
           title: 'Unsupported file type',
-          description: `${names} — please upload PDF, PPTX, DOCX, TXT/MD, Image, Video, or Audio files.`,
+          description: `${names} — please upload PDF, PPTX/PPT, DOCX, TXT/MD, Image, Video, or Audio files.`,
           variant: 'destructive',
         })
       }
-      for (const file of acceptedFiles) {
+      for (const file of validFiles) {
         try {
           await upload.mutateAsync(file)
           toast({ title: 'Uploading', description: `${file.name} is being processed…` })

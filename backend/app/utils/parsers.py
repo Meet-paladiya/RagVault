@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 import logging
 import os
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -355,68 +356,265 @@ def parse_pdf(path: str) -> List[Dict[str, Any]]:
 
     return pages
 
+def _extract_text_from_binary_ppt(path: str) -> str:
+    """Fallback parser for legacy binary .ppt files (OLE2 format)."""
+    text_chunks = []
+    try:
+        import olefile
+        if olefile.isOleFile(path):
+            with olefile.OleFileIO(path) as ole:
+                if ole.exists('PowerPoint Document'):
+                    stream = ole.openstream('PowerPoint Document').read()
+                    import re
+                    # Extract printable UTF-16LE strings (standard PPT text streams)
+                    utf16_matches = re.findall(b'(?:[\x20-\x7e]\x00){3,}', stream)
+                    for m in utf16_matches:
+                        try:
+                            decoded = m.decode('utf-16le', errors='ignore').strip()
+                            if len(decoded) > 3 and not decoded.startswith('PowerPoint'):
+                                text_chunks.append(decoded)
+                        except Exception:
+                            pass
+                    # Extract ASCII strings
+                    ascii_matches = re.findall(b'[\x20-\x7e]{4,}', stream)
+                    for m in ascii_matches:
+                        try:
+                            decoded = m.decode('ascii', errors='ignore').strip()
+                            if len(decoded) > 3 and not any(k in decoded for k in ['PowerPoint', 'Current User', 'Document Summary']):
+                                text_chunks.append(decoded)
+                        except Exception:
+                            pass
+    except Exception as ole_err:
+        logger.warning(f"Olefile extraction notice for {path}: {ole_err}")
+
+    # Fallback to direct raw binary regex string extraction
+    if not text_chunks:
+        try:
+            with open(path, "rb") as f:
+                content = f.read()
+            import re
+            utf16_matches = re.findall(b'(?:[\x20-\x7e]\x00){4,}', content)
+            for m in utf16_matches:
+                try:
+                    decoded = m.decode('utf-16le', errors='ignore').strip()
+                    if len(decoded) > 3:
+                        text_chunks.append(decoded)
+                except Exception:
+                    pass
+        except Exception as raw_err:
+            logger.warning(f"Raw binary extraction failed for {path}: {raw_err}")
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique_chunks = []
+    for c in text_chunks:
+        if c not in seen:
+            seen.add(c)
+            unique_chunks.append(c)
+
+    return "\n".join(unique_chunks)
+
+
 def parse_pptx(path: str) -> List[Dict[str, Any]]:
-    """python-pptx slide-by-slide text extraction."""
+    """python-pptx slide-by-slide text extraction with legacy binary .ppt fallback."""
     from pptx import Presentation
-    logger.info(f"Parsing PPTX: {path}")
-    prs = Presentation(path)
-    pages = []
+    logger.info(f"Parsing PPT/PPTX: {path}")
     source = os.path.basename(path)
-    for i, slide in enumerate(prs.slides):
-        text = []
-        for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                text.append(shape.text)
-        slide_text = "\n".join(text).strip()
-        if slide_text:
-            pages.append({
-                "text": slide_text,
-                "page": i + 1,
-                "source": source
-            })
+
+    # Strategy 1: OpenXML (.pptx) via python-pptx
+    try:
+        prs = Presentation(path)
+        pages = []
+        for i, slide in enumerate(prs.slides):
+            text = []
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text.append(shape.text)
+            slide_text = "\n".join(text).strip()
+            if slide_text:
+                pages.append({
+                    "text": slide_text,
+                    "page": i + 1,
+                    "source": source
+                })
+        if pages:
+            return pages
+    except Exception as exc:
+        logger.warning(f"python-pptx could not parse {path} as OpenXML: {exc}. Attempting legacy .ppt fallback...")
+
+    # Strategy 2: Legacy binary .ppt format fallback
+    full_text = _extract_text_from_binary_ppt(path)
+    if not full_text.strip():
+        logger.warning(f"No text extracted from PPT file {source}")
+        return []
+
+    # Break into pseudo-pages (~2000 chars per page)
+    page_size = 2000
+    pages = []
+    chunks = [full_text[i:i + page_size] for i in range(0, len(full_text), page_size)]
+    for i, c in enumerate(chunks, start=1):
+        if c.strip():
+            pages.append({"text": c.strip(), "page": i, "source": source})
     return pages
+
+
+_whisper_model_cache = None
+_whisper_model_lock = threading.Lock()
+
+
+def _get_whisper_model():
+    """Lazy thread-safe singleton for Faster-Whisper model with CPU fallback handling."""
+    global _whisper_model_cache
+    if _whisper_model_cache is not None:
+        return _whisper_model_cache
+
+    with _whisper_model_lock:
+        if _whisper_model_cache is not None:
+            return _whisper_model_cache
+
+        from faster_whisper import WhisperModel
+        from app.config import get_settings
+        settings = get_settings()
+
+        logger.info(f"[WHISPER] Loading Whisper model ('{settings.whisper_model}') on {settings.whisper_device}...")
+
+        # Try compute_type='int8' first; fallback to 'default' or 'float32' if host CPU/device unsupported
+        model = None
+        for comp_type in ["int8", "default", "float32"]:
+            try:
+                logger.info(f"[WHISPER] Attempting load with compute_type='{comp_type}'...")
+                model = WhisperModel(settings.whisper_model, device=settings.whisper_device, compute_type=comp_type)
+                logger.info(f"[WHISPER] Successfully loaded Whisper model with compute_type='{comp_type}'")
+                break
+            except Exception as exc:
+                logger.warning(f"[WHISPER] Failed with compute_type='{comp_type}': {exc}")
+
+        if model is None:
+            raise RuntimeError(f"Could not initialize Faster-Whisper model '{settings.whisper_model}'.")
+
+        _whisper_model_cache = model
+        return _whisper_model_cache
+
+
+def _extract_audio_to_wav(media_path: str) -> tuple[str, bool]:
+    """
+    Extract/normalize any audio or video file into a standard 16kHz mono 16-bit PCM WAV file.
+    Returns tuple of (wav_path, is_temp_file).
+    """
+    import subprocess
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        wav_path = tmp.name
+
+    extracted = False
+
+    # Strategy 1: ffmpeg CLI (Fastest & most reliable)
+    try:
+        res = subprocess.run(
+            ["ffmpeg", "-y", "-i", media_path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", wav_path],
+            check=True, capture_output=True
+        )
+        if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+            extracted = True
+    except Exception as ffmpeg_err:
+        logger.warning(f"[AUDIO] ffmpeg CLI execution failed for {media_path}: {ffmpeg_err}")
+
+    # Strategy 2: PyAV fallback (pure Python bindings)
+    if not extracted:
+        try:
+            import av
+            container = av.open(media_path)
+            audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
+            if audio_stream:
+                output_container = av.open(wav_path, 'w', format='wav')
+                out_stream = output_container.add_stream('pcm_s16le', rate=16000)
+                out_stream.channels = 1
+
+                resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
+                for frame in container.decode(audio_stream):
+                    for resampled_frame in resampler.resample(frame):
+                        for packet in out_stream.encode(resampled_frame):
+                            output_container.mux(packet)
+                for packet in out_stream.encode(None):
+                    output_container.mux(packet)
+                output_container.close()
+                container.close()
+                if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+                    extracted = True
+        except Exception as av_err:
+            logger.warning(f"[AUDIO] PyAV audio extraction failed for {media_path}: {av_err}")
+
+    if extracted:
+        return wav_path, True
+    else:
+        if os.path.exists(wav_path):
+            try:
+                os.unlink(wav_path)
+            except Exception:
+                pass
+        return media_path, False
+
 
 def _transcribe_with_whisper(audio_path: str, source: str) -> List[Dict[str, Any]]:
-    """Faster-Whisper transcription. Returns segments grouped as pages."""
-    from faster_whisper import WhisperModel
-    from app.config import get_settings
-    settings = get_settings()
-    logger.info(f"Transcribing {audio_path} using Whisper ({settings.whisper_model})")
-    
-    model = WhisperModel(settings.whisper_model, device=settings.whisper_device, compute_type="int8")
-    segments, _ = model.transcribe(audio_path, beam_size=5)
-    
-    pages = []
-    current_text = []
-    current_page = 1
-    # Group every ~30 seconds of speech into one "page"
-    page_duration = 30.0
-    start_time = 0.0
+    """Faster-Whisper transcription. Returns segments grouped into ~30-second pseudo-pages."""
+    logger.info(f"[WHISPER] Transcribing audio from {source}...")
+    try:
+        model = _get_whisper_model()
+        segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=True)
 
-    for segment in segments:
-        current_text.append(segment.text)
-        if segment.end - start_time >= page_duration:
-            pages.append({
-                "text": " ".join(current_text).strip(),
-                "page": current_page,
-                "source": source
-            })
-            current_text = []
-            current_page += 1
-            start_time = segment.end
+        pages = []
+        current_text = []
+        current_page = 1
+        page_duration = 30.0
+        start_time = 0.0
 
-    if current_text:
-        pages.append({
-            "text": " ".join(current_text).strip(),
-            "page": current_page,
-            "source": source
-        })
+        for segment in segments:
+            text = segment.text.strip()
+            if text:
+                current_text.append(text)
+            if segment.end - start_time >= page_duration:
+                joined = " ".join(current_text).strip()
+                if joined:
+                    pages.append({
+                        "text": joined,
+                        "page": current_page,
+                        "source": source
+                    })
+                    current_page += 1
+                current_text = []
+                start_time = segment.end
 
-    return pages
+        if current_text:
+            joined = " ".join(current_text).strip()
+            if joined:
+                pages.append({
+                    "text": joined,
+                    "page": current_page,
+                    "source": source
+                })
+
+        logger.info(f"[WHISPER] Transcribed {source}: extracted {len(pages)} pages/chunks")
+        return pages
+    except Exception as exc:
+        logger.exception(f"[WHISPER] Transcription failed for {source}: {exc}")
+        return []
+
 
 def parse_audio(path: str) -> List[Dict[str, Any]]:
+    """Extract audio and transcribe with Whisper."""
     source = os.path.basename(path)
-    return _transcribe_with_whisper(path, source)
+    logger.info(f"[AUDIO] Processing audio file: {path}")
+    wav_path, is_temp = _extract_audio_to_wav(path)
+    try:
+        return _transcribe_with_whisper(wav_path, source)
+    finally:
+        if is_temp and os.path.exists(wav_path):
+            try:
+                os.unlink(wav_path)
+            except Exception:
+                pass
+
 
 def parse_image(path: str) -> List[Dict[str, Any]]:
     """Extract text from standalone images (PNG, JPG, WEBP, BMP, TIFF) using Tesseract OCR."""
@@ -449,62 +647,18 @@ def parse_image(path: str) -> List[Dict[str, Any]]:
         logger.exception(f"[IMAGE] Failed to OCR image {source}: {exc}")
         return []
 
+
 def parse_video(path: str) -> List[Dict[str, Any]]:
-    """Extract audio from video file with ffmpeg (or PyAV fallback) and transcribe with Whisper."""
-    import subprocess, tempfile
+    """Extract audio from video file and transcribe with Whisper."""
     source = os.path.basename(path)
-    logger.info(f"[VIDEO] Extracting audio from video: {path}")
-    
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        audio_path = tmp.name
-        
-    extracted = False
+    logger.info(f"[VIDEO] Processing video file: {path}")
+    wav_path, is_temp = _extract_audio_to_wav(path)
     try:
-        # Strategy 1: Try ffmpeg CLI (Fastest, direct pcm_s16le 16kHz mono extraction)
-        try:
-            res = subprocess.run(
-                ["ffmpeg", "-y", "-i", path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_path],
-                check=True, capture_output=True
-            )
-            if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
-                extracted = True
-        except Exception as ffmpeg_err:
-            logger.warning(f"[VIDEO] ffmpeg CLI execution failed: {ffmpeg_err}")
-
-        # Strategy 2: Fallback to PyAV (pure Python FFmpeg binding) if CLI binary is unavailable
-        if not extracted:
-            try:
-                import av
-                container = av.open(path)
-                audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
-                if audio_stream:
-                    output_container = av.open(audio_path, 'w', format='wav')
-                    out_stream = output_container.add_stream('pcm_s16le', rate=16000)
-                    out_stream.channels = 1
-                    
-                    resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
-                    for frame in container.decode(audio_stream):
-                        for resampled_frame in resampler.resample(frame):
-                            for packet in out_stream.encode(resampled_frame):
-                                output_container.mux(packet)
-                    for packet in out_stream.encode(None):
-                        output_container.mux(packet)
-                    output_container.close()
-                    container.close()
-                    if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
-                        extracted = True
-            except Exception as av_err:
-                logger.warning(f"[VIDEO] PyAV fallback audio extraction failed: {av_err}")
-
-        # Strategy 3: Directly pass original video file to Whisper as last resort
-        if not extracted:
-            logger.info(f"[VIDEO] Attempting direct Whisper transcription for {path}")
-            return _transcribe_with_whisper(path, source)
-
-        return _transcribe_with_whisper(audio_path, source)
+        return _transcribe_with_whisper(wav_path, source)
     finally:
-        if os.path.exists(audio_path):
+        if is_temp and os.path.exists(wav_path):
             try:
-                os.unlink(audio_path)
+                os.unlink(wav_path)
             except Exception:
                 pass
+

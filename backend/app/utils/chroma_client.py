@@ -142,20 +142,25 @@ def query_collection(
     dists = results.get("distances", [[]])[0] or []
 
     candidates: list[dict[str, Any]] = []
+    all_candidates: list[dict[str, Any]] = []
     for doc_text, meta, dist in zip(docs, metas, dists):
         dist_val = float(dist)
-        if max_distance is not None and dist_val > max_distance:
-            continue
-        candidates.append(
-            {
-                "text": doc_text,
-                "source": meta.get("source", "unknown"),
-                "page": meta.get("page", 0),
-                "chunk_index": meta.get("chunk_index", 0),
-                "document_id": meta.get("document_id", ""),
-                "distance": dist_val,
-            }
-        )
+        item = {
+            "text": doc_text,
+            "source": meta.get("source", "unknown"),
+            "page": meta.get("page", 0),
+            "chunk_index": meta.get("chunk_index", 0),
+            "document_id": meta.get("document_id", ""),
+            "distance": dist_val,
+        }
+        all_candidates.append(item)
+        if max_distance is None or dist_val <= max_distance:
+            candidates.append(item)
+
+    # Fallback to all candidates if max_distance threshold filtered out all matches
+    if not candidates and all_candidates:
+        logger.info("max_distance filter (%.2f) yielded 0 candidates; falling back to top %d vector matches", max_distance, len(all_candidates))
+        candidates = all_candidates
 
     # Prefer relevant chunks from different uploaded documents before filling
     # the remaining slots with the strongest matches.

@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     chunk_size: int = 600
     chunk_overlap: int = 100
     top_k: int = 5
-    rag_max_distance: float = 0.40
+    rag_max_distance: float = 0.50
 
     # ── Faster-Whisper ────────────────────────────────────────────────────────
     whisper_model: str = "base"

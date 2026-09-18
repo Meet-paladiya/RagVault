@@ -264,15 +264,15 @@ async def generate_quiz(
     context = "\n\n".join(
         f"[Source: {c['source']}, Page: {c['page']}]\n{c['text']}" for c in chunks
     )
-
+    
     # ── Dispatch parallel batch requests to LLM ──────────────────────────────
-    prompt_mcq = _build_batch_prompt(topic, context, "mcq", count=10)
-    prompt_blank = _build_batch_prompt(topic, context, "blank", count=10)
+    prompt_mcq = _build_batch_prompt(topic, context, count=10, focus_angle="core")
+    prompt_blank = _build_batch_prompt(topic, context, count=10, focus_angle="applied")
 
     mcq_task = _fetch_question_batch(prompt_mcq, "mcq")
     blank_task = _fetch_question_batch(prompt_blank, "blank")
 
-    logger.info("[QUIZ] Dispatching parallel MCQ & Fill-in-blank batches to local LLM...")
+    logger.info("[QUIZ] Dispatching parallel question batches (core + applied) to local LLM...")
     mcqs, blanks = await asyncio.gather(mcq_task, blank_task)
 
     questions = mcqs + blanks
