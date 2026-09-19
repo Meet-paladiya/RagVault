@@ -91,7 +91,7 @@ async def upload_document(
     """
     Upload and ingest a document into a knowledge space.
 
-    - Validates file type (PDF, PPTX, TXT, MD, DOCX, Video, Audio).
+    - Validates file type (PDF, PPTX, Video, Audio).
     - Streams file to temporary storage.
     - Creates Document record in 'processing' status.
     - Dispatches ingestion pipeline as a background task.

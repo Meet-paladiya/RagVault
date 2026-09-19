@@ -111,35 +111,39 @@ def assemble_context_node(state: RAGState) -> RAGState:
     return state
 
 
-def _build_prompt(state: RAGState) -> str:
-    """Construct the strict document-grounded prompt for the LLM."""
+def _build_messages(state: RAGState) -> list[dict[str, str]]:
+    """Construct the strict document-grounded system and user messages for the LLM."""
     history_lines: list[str] = []
     for msg in state["chat_history"][-6:]:  # last 3 turns
         role = "User" if msg["role"] == "user" else "Assistant"
         history_lines.append(f"{role}: {msg['content']}")
     history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
 
-    return f"""You are RagVault, a strict document-grounded AI knowledge assistant.
+    system_content = (
+        "You are RagVault, a strict document-grounded AI knowledge assistant.\n\n"
+        "MANDATORY RESTRICTIONS:\n"
+        "1. Answer questions ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts from the user's uploaded documents.\n"
+        "2. ABSOLUTELY NEVER use outside knowledge, pre-trained knowledge, physics/science/math/trivia knowledge, or assumptions.\n"
+        "3. If the provided CONTEXT does NOT explicitly contain the answer to the user's question, you MUST reply EXACTLY with:\n"
+        f'"{NOT_FOUND_MESSAGE}"\n'
+        "4. Never answer from general knowledge. If the topic is absent from the provided context excerpts, refuse immediately with the exact refusal sentence above.\n"
+        "5. Reference facts using inline citations like [Source: <filename>, Page: <page>]."
+    )
 
-CRITICAL INSTRUCTIONS:
-1. Answer the user's question ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts below.
-2. ABSOLUTELY NEVER use outside knowledge, general pre-trained knowledge, or assumptions.
-3. If the provided CONTEXT does not explicitly contain the answer to the user's question, you MUST reply EXACTLY with:
-"I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
-4. Do NOT answer questions about physics, science, math, history, or external trivia unless that topic is explicitly described in the CONTEXT below.
-5. If the user asks for examples or explanations, only provide examples that are explicitly stated in the CONTEXT below. Never invent external examples.
-6. Reference facts using inline citations like [Source: <filename>, Page: <page>].
+    user_content = (
+        f"=== CONTEXT FROM UPLOADED DOCUMENTS ===\n"
+        f"{state['context']}\n\n"
+        f"=== CONVERSATION HISTORY ===\n"
+        f"{history_block}\n\n"
+        f"=== USER QUESTION ===\n"
+        f"{state['question']}\n\n"
+        f"=== GROUNDED RESPONSE ==="
+    )
 
-=== CONTEXT FROM UPLOADED DOCUMENTS ===
-{state['context']}
-
-=== CONVERSATION HISTORY ===
-{history_block}
-
-=== USER QUESTION ===
-{state['question']}
-
-=== GROUNDED RESPONSE ==="""
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]
 
 
 def generate_answer_node(state: RAGState) -> RAGState:
@@ -158,7 +162,7 @@ def generate_answer_node(state: RAGState) -> RAGState:
         return state
 
     cfg = get_settings()
-    prompt = _build_prompt(state)
+    messages = _build_messages(state)
 
     try:
         with httpx.Client(timeout=120.0) as client:
@@ -166,7 +170,7 @@ def generate_answer_node(state: RAGState) -> RAGState:
                 f"{cfg.llm_base_url}/chat/completions",
                 json={
                     "model": cfg.llm_model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": messages,
                     "temperature": 0.0,
                     "stream": False,
                 },
@@ -317,34 +321,38 @@ async def stream_rag(
         )
     context = "\n\n---\n\n".join(parts)
 
-    # Build prompt
+    # Build prompt messages
     history_lines: list[str] = []
     for msg in chat_history[-6:]:
         role = "User" if msg["role"] == "user" else "Assistant"
         history_lines.append(f"{role}: {msg['content']}")
     history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
 
-    prompt = f"""You are RagVault, a strict document-grounded AI knowledge assistant.
+    system_content = (
+        "You are RagVault, a strict document-grounded AI knowledge assistant.\n\n"
+        "MANDATORY RESTRICTIONS:\n"
+        "1. Answer questions ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts from the user's uploaded documents.\n"
+        "2. ABSOLUTELY NEVER use outside knowledge, pre-trained knowledge, physics/science/math/trivia knowledge, or assumptions.\n"
+        "3. If the provided CONTEXT does NOT explicitly contain the answer to the user's question, you MUST reply EXACTLY with:\n"
+        f'"{NOT_FOUND_MESSAGE}"\n'
+        "4. Never answer from general knowledge. If the topic is absent from the provided context excerpts, refuse immediately with the exact refusal sentence above.\n"
+        "5. Reference facts using inline citations like [Source: <filename>, Page: <page>]."
+    )
 
-CRITICAL INSTRUCTIONS:
-1. Answer the user's question ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts below.
-2. ABSOLUTELY NEVER use outside knowledge, general pre-trained knowledge, or assumptions.
-3. If the provided CONTEXT does not explicitly contain the answer to the user's question, you MUST reply EXACTLY with:
-"I cannot find sufficient information in your uploaded documents to answer this question. Please check your uploaded files or upload additional relevant material."
-4. Do NOT answer questions about physics, science, math, history, or external trivia unless that topic is explicitly described in the CONTEXT below.
-5. If the user asks for examples or explanations, only provide examples that are explicitly stated in the CONTEXT below. Never invent external examples.
-6. Reference facts using inline citations like [Source: <filename>, Page: <page>].
+    user_content = (
+        f"=== CONTEXT FROM UPLOADED DOCUMENTS ===\n"
+        f"{context}\n\n"
+        f"=== CONVERSATION HISTORY ===\n"
+        f"{history_block}\n\n"
+        f"=== USER QUESTION ===\n"
+        f"{question}\n\n"
+        f"=== GROUNDED RESPONSE ==="
+    )
 
-=== CONTEXT FROM UPLOADED DOCUMENTS ===
-{context}
-
-=== CONVERSATION HISTORY ===
-{history_block}
-
-=== USER QUESTION ===
-{question}
-
-=== GROUNDED RESPONSE ==="""
+    messages = [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]
 
     # ── Step 4: Stream tokens from LLM with temperature=0.0 (Strict Grounding)
     logger.info("[RAG:stream] Streaming response from local LLM at %s", cfg.llm_base_url)
@@ -357,7 +365,7 @@ CRITICAL INSTRUCTIONS:
                 f"{cfg.llm_base_url}/chat/completions",
                 json={
                     "model": cfg.llm_model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": messages,
                     "temperature": 0.0,
                     "stream": True,
                 },

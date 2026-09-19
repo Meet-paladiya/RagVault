@@ -6,14 +6,11 @@ import threading
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {
-    ".pdf", ".pptx", ".ppt", ".txt", ".md", ".docx", ".doc",
-    ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff",
+    ".pdf", ".pptx", ".ppt",
     ".mp4", ".mkv", ".mov", ".avi", ".webm",
     ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"
 }
 
-TEXT_EXTENSIONS = {".txt", ".md"}
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
 
