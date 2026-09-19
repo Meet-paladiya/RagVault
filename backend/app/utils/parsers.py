@@ -124,8 +124,15 @@ def parse_pdf(path: str) -> List[Dict[str, Any]]:
     """
 
     import fitz
-    import pytesseract
-    from PIL import Image
+    try:
+        import pytesseract
+        from PIL import Image
+        HAS_PYTESSERACT = True
+    except ImportError:
+        pytesseract = None
+        Image = None
+        HAS_PYTESSERACT = False
+        logger.warning("[PDF] pytesseract or PIL is not installed; OCR fallback disabled.")
 
     logger.info("[PDF] Parsing PDF: %s", path)
 
@@ -221,6 +228,9 @@ def parse_pdf(path: str) -> List[Dict[str, Any]]:
         200 DPI gives a good speed/accuracy balance for
         normal scanned documents.
         """
+        if not HAS_PYTESSERACT or Image is None or pytesseract is None:
+            logger.warning("[PDF] Skipping OCR for scanned page: pytesseract module is not available.")
+            return ""
 
         pix = page.get_pixmap(
             dpi=200,
@@ -478,16 +488,22 @@ def _get_whisper_model():
 
         logger.info(f"[WHISPER] Loading Whisper model ('{settings.whisper_model}') on {settings.whisper_device}...")
 
-        # Try compute_type='int8' first; fallback to 'default' or 'float32' if host CPU/device unsupported
+        # Temporarily override HF_HUB_OFFLINE so initial model download succeeds on first run
+        old_offline = os.environ.pop("HF_HUB_OFFLINE", None)
+
         model = None
-        for comp_type in ["int8", "default", "float32"]:
-            try:
-                logger.info(f"[WHISPER] Attempting load with compute_type='{comp_type}'...")
-                model = WhisperModel(settings.whisper_model, device=settings.whisper_device, compute_type=comp_type)
-                logger.info(f"[WHISPER] Successfully loaded Whisper model with compute_type='{comp_type}'")
-                break
-            except Exception as exc:
-                logger.warning(f"[WHISPER] Failed with compute_type='{comp_type}': {exc}")
+        try:
+            for comp_type in ["int8", "default", "float32"]:
+                try:
+                    logger.info(f"[WHISPER] Attempting load with compute_type='{comp_type}'...")
+                    model = WhisperModel(settings.whisper_model, device=settings.whisper_device, compute_type=comp_type)
+                    logger.info(f"[WHISPER] Successfully loaded Whisper model with compute_type='{comp_type}'")
+                    break
+                except Exception as exc:
+                    logger.warning(f"[WHISPER] Failed with compute_type='{comp_type}': {exc}")
+        finally:
+            if old_offline is not None:
+                os.environ["HF_HUB_OFFLINE"] = old_offline
 
         if model is None:
             raise RuntimeError(f"Could not initialize Faster-Whisper model '{settings.whisper_model}'.")
@@ -561,7 +577,14 @@ def _transcribe_with_whisper(audio_path: str, source: str) -> List[Dict[str, Any
     logger.info(f"[WHISPER] Transcribing audio from {source}...")
     try:
         model = _get_whisper_model()
-        segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=True)
+        
+        try:
+            segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=True)
+            segment_list = list(segments)
+        except Exception as vad_err:
+            logger.warning(f"[WHISPER] Transcribe with vad_filter=True failed for {source} ({vad_err}); retrying with vad_filter=False...")
+            segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=False)
+            segment_list = list(segments)
 
         pages = []
         current_text = []
@@ -569,7 +592,7 @@ def _transcribe_with_whisper(audio_path: str, source: str) -> List[Dict[str, Any
         page_duration = 30.0
         start_time = 0.0
 
-        for segment in segments:
+        for segment in segment_list:
             text = segment.text.strip()
             if text:
                 current_text.append(text)
@@ -594,7 +617,7 @@ def _transcribe_with_whisper(audio_path: str, source: str) -> List[Dict[str, Any
                     "source": source
                 })
 
-        logger.info(f"[WHISPER] Transcribed {source}: extracted {len(pages)} pages/chunks")
+        logger.info(f"[WHISPER] Transcribed {source}: extracted {len(pages)} pages/chunks from {len(segment_list)} segments")
         return pages
     except Exception as exc:
         logger.exception(f"[WHISPER] Transcription failed for {source}: {exc}")
@@ -618,8 +641,13 @@ def parse_audio(path: str) -> List[Dict[str, Any]]:
 
 def parse_image(path: str) -> List[Dict[str, Any]]:
     """Extract text from standalone images (PNG, JPG, WEBP, BMP, TIFF) using Tesseract OCR."""
-    from PIL import Image, ImageEnhance
-    import pytesseract
+    try:
+        from PIL import Image, ImageEnhance
+        import pytesseract
+    except ImportError:
+        logger.error("[IMAGE] pytesseract or PIL is not installed; cannot perform image OCR.")
+        return []
+
     source = os.path.basename(path)
     logger.info(f"[IMAGE] Parsing image with OCR: {path}")
 

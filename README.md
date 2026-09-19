@@ -2,7 +2,7 @@
 
 > **100% Offline** · Self-Hosted · RAG-Powered AI Learning System
 
-A fully offline, self-hosted Retrieval-Augmented Generation (RAG) learning platform for students. Upload PDF, PPTX, Word, text, image, video, and audio files to create "knowledge spaces," then ask questions, generate quizzes, create AI study notes, track weak topics, and get personalized study recommendations — all powered by local AI models with zero internet connectivity required after setup.
+A fully offline, self-hosted Retrieval-Augmented Generation (RAG) learning platform for students. Upload PDF, PPTX, Word, video, and audio files to create "knowledge spaces," then ask questions, generate quizzes, create AI study notes, track weak topics, and get personalized study recommendations — all powered by local AI models with zero internet connectivity required after setup.
 
 ---
 
