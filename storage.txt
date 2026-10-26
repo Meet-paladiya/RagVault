@@ -1,0 +1,28 @@
+git clean -fdpsql -U knowledge_user -d template1 -W
+
+pg_sec_9d3f82a7b1c4e650
+
+template1 # 
+
+\c knowledge_hub
+
+pg_sec_9d3f82a7b1c4e650
+
+
+\l
+
+\c 
+psql -u knowledge_user -p 
+
+\l
+
+\c knowledge_hub
+
+pg_sec_9d3f82a7b1c4e650
+
+
+\dt
+
+\dt *.*
+
+select * from users;

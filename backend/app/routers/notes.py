@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.note import NotesResponse
 from app.services.notes_service import (
     build_notes_pdf,
+    build_notes_zip,
     build_remedial_notes_pdf,
     generate_notes,
     generate_remedial_quiz_notes,
@@ -75,15 +76,52 @@ async def download_notes_pdf(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """Download the latest complete page-by-page notes as a searchable PDF."""
-    await _verify_chat_ownership(chat_id, current_user, db)
+    """
+    Download study notes. If multiple documents were uploaded, packages separate PDFs
+    for every document into a downloadable ZIP archive. If a single document exists, returns
+    its consolidated PDF.
+    """
+    chat = await _verify_chat_ownership(chat_id, current_user, db)
     note = await get_latest_notes(db=db, chat_id=chat_id)
     if not note:
-        raise HTTPException(status_code=404, detail="Generate AI notes before downloading the PDF.")
+        raise HTTPException(status_code=404, detail="Generate AI notes before downloading.")
+
+    cards = note.cards or []
+    distinct_sources = {c.get("source") for c in cards if c.get("source")}
+
+    # When multiple files are present, download as a ZIP containing separate PDFs for each file
+    if len(distinct_sources) > 1:
+        zip_bytes, zip_filename = build_notes_zip(note, chat.title)
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+        )
+
     return Response(
-        content=build_notes_pdf(note),
+        content=build_notes_pdf(note, chat.title),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="ragvault-notes-{chat_id}.pdf"'},
+    )
+
+
+@router.get("/{chat_id}/notes/zip")
+async def download_notes_zip(
+    chat_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Download separate PDF study notes for every uploaded document packaged inside a ZIP archive."""
+    chat = await _verify_chat_ownership(chat_id, current_user, db)
+    note = await get_latest_notes(db=db, chat_id=chat_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Generate AI notes before downloading.")
+
+    zip_bytes, zip_filename = build_notes_zip(note, chat.title)
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
     )
 
 

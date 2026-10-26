@@ -10,6 +10,9 @@ class NoteCard(BaseModel):
     key_points: List[str]
     source: Optional[str] = "Document"
     page: Optional[int] = 1
+    page_end: Optional[int] = None
+    chapter: Optional[str] = None
+    is_new_chapter: Optional[bool] = False
     tag: str = "Concept"  # Options: Concept | Definition | Formula | Takeaway | Summary
 
     model_config = ConfigDict(from_attributes=True)
