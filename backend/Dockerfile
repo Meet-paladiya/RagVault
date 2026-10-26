@@ -1,3 +1,4 @@
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -11,7 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
 
-# Copy requirements and install python dependencies
+# Install PaddlePaddle CPU inference engine
+RUN pip install --no-cache-dir --default-timeout=120 --retries 5 \
+    paddlepaddle==3.2.0 \
+    -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir --default-timeout=120 --retries 5 -r requirements.txt
 

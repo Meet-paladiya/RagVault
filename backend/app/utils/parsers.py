@@ -105,263 +105,230 @@ def parse_docx(path: str) -> List[Dict[str, Any]]:
             pages.append({"text": c.strip(), "page": i, "source": source})
     return pages
 
+
 def parse_pdf(path: str) -> List[Dict[str, Any]]:
     """
-    Hybrid PDF parser.
-
-    Strategy:
-    1. Try normal PyMuPDF text extraction first.
-    2. Decide whether the page contains meaningful digital text.
-    3. If the page looks scanned/image-based, run OCR.
-    4. OCR is performed only when necessary.
-    5. Supports mixed PDFs containing both digital and scanned pages.
-
-    This keeps normal PDFs fast while allowing scanned PDFs
-    to enter the existing chunking/embedding pipeline.
+    Hybrid PDF extraction:
+    - PyMuPDF extracts selectable text.
+    - PaddleOCR reads scanned pages.
+    - PaddleOCR also reads text inside embedded images
+      on mixed-content pages.
+    - Page number and source metadata are preserved.
     """
-
     import fitz
-    try:
-        import pytesseract
-        from PIL import Image
-        HAS_PYTESSERACT = True
-    except ImportError:
-        pytesseract = None
-        Image = None
-        HAS_PYTESSERACT = False
-        logger.warning("[PDF] pytesseract or PIL is not installed; OCR fallback disabled.")
+    import numpy as np
 
     logger.info("[PDF] Parsing PDF: %s", path)
 
-    doc = fitz.open(path)
     pages = []
     source = os.path.basename(path)
 
-    # -----------------------------
-    # Helper: meaningful text check
-    # -----------------------------
-    def has_meaningful_text(text: str) -> bool:
-        """
-        Determine whether extracted PDF text is substantial enough
-        to trust as real page content.
+    # Create PaddleOCR only when OCR is actually needed.
+    ocr_engine = None
 
-        We intentionally don't use a tiny fixed character threshold.
-        A page with a short heading can be legitimate text.
-        """
+    def get_ocr_engine():
+        nonlocal ocr_engine
 
-        if not text:
-            return False
+        if ocr_engine is None:
+            from paddleocr import PaddleOCR
 
-        cleaned = " ".join(text.split())
-
-        # Count useful characters.
-        alphanumeric_count = sum(
-            char.isalnum()
-            for char in cleaned
-        )
-
-        # Count words.
-        words = cleaned.split()
-
-        # Digital page is considered meaningful if:
-        # - it has enough words, OR
-        # - it contains a reasonable amount of actual text.
-        return (
-            len(words) >= 5
-            or alphanumeric_count >= 40
-        )
-
-    # -----------------------------
-    # Helper: detect large images
-    # -----------------------------
-    def has_large_image(page) -> bool:
-        """
-        Detect whether a page contains a large image.
-
-        Scanned PDF pages are commonly stored as one large image
-        covering most of the page.
-        """
-
-        try:
-            page_area = abs(page.rect)
-
-            if page_area <= 0:
-                return False
-
-            image_infos = page.get_image_info()
-
-            for image_info in image_infos:
-                bbox = image_info.get("bbox")
-
-                if not bbox:
-                    continue
-
-                image_rect = fitz.Rect(bbox)
-
-                image_area = abs(image_rect)
-
-                coverage = image_area / page_area
-
-                # Large image covering most of the page
-                if coverage >= 0.50:
-                    return True
-
-        except Exception as exc:
-            logger.warning(
-                "[PDF] Image detection failed on page %d: %s",
-                page.number + 1,
-                exc,
+            ocr_engine = PaddleOCR(
+                lang="en",
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=False,
             )
 
-        return False
+        return ocr_engine
 
-    # -----------------------------
-    # Helper: perform OCR
-    # -----------------------------
-    def ocr_page(page) -> str:
-        """
-        Render the PDF page and run local Tesseract OCR.
+    def run_ocr(image: np.ndarray) -> str:
+        """Run local PaddleOCR on an RGB image."""
+        try:
+            results = get_ocr_engine().predict(image)
+            lines = []
 
-        200 DPI gives a good speed/accuracy balance for
-        normal scanned documents.
-        """
-        if not HAS_PYTESSERACT or Image is None or pytesseract is None:
-            logger.warning("[PDF] Skipping OCR for scanned page: pytesseract module is not available.")
+            for result in results:
+                recognized = result.get("rec_texts", [])
+                scores = result.get("rec_scores", [])
+
+                for index, line in enumerate(recognized):
+                    line = str(line).strip()
+
+                    # Ignore very low-confidence results.
+                    if not line:
+                        continue
+
+                    if index < len(scores) and float(scores[index]) < 0.50:
+                        continue
+
+                    lines.append(line)
+
+            return "\n".join(lines).strip()
+
+        except Exception:
+            logger.exception("[OCR] PaddleOCR failed")
             return ""
 
+    def render_region(page, rect=None) -> np.ndarray:
+        """Render a page or a selected image region."""
         pix = page.get_pixmap(
-            dpi=200,
-            alpha=False
+            dpi=250,
+            clip=rect,
+            alpha=False,
         )
 
-        image = Image.frombytes(
-            "RGB",
-            [pix.width, pix.height],
-            pix.samples
-        )
+        image = np.frombuffer(
+            pix.samples,
+            dtype=np.uint8,
+        ).reshape(pix.height, pix.width, pix.n)
 
-        text = pytesseract.image_to_string(
-            image,
-            lang="eng",
-            config="--psm 3",
-        )
+        # PaddleOCR expects an RGB image.
+        if pix.n == 4:
+            image = image[:, :, :3]
 
-        return text.strip()
+        return image.copy()
 
-    # -----------------------------
-    # Process pages
-    # -----------------------------
-    for i in range(len(doc)):
+    def normalize(text: str) -> str:
+        return " ".join(text.lower().split())
 
-        page = doc.load_page(i)
+    try:
+        with fitz.open(path) as doc:
+            for index, page in enumerate(doc):
+                page_number = index + 1
 
-        # ---------------------------------
-        # Step 1: normal PDF text extraction
-        # ---------------------------------
-        extracted_text = page.get_text("text").strip()
+                # 1. Extract normal, selectable PDF text.
+                digital_text = page.get_text("text").strip()
+                combined_text = digital_text
 
-        meaningful_text = has_meaningful_text(
-            extracted_text
-        )
-
-        # ---------------------------------
-        # Step 2: inspect image content
-        # ---------------------------------
-        large_image = has_large_image(page)
-
-        # ---------------------------------
-        # Step 3: decide whether OCR needed
-        # ---------------------------------
-
-        if meaningful_text and not large_image:
-            # Normal digital PDF
-            text = extracted_text
-
-            logger.debug(
-                "[PDF] Page %d: digital text extraction",
-                i + 1,
-            )
-
-        elif meaningful_text and large_image:
-            # Important case:
-            #
-            # Some PDFs contain a scanned image AND
-            # a hidden OCR/text layer.
-            #
-            # Prefer the existing digital text because
-            # it is faster and usually cleaner.
-            text = extracted_text
-
-            logger.debug(
-                "[PDF] Page %d: text + image detected; "
-                "using existing text layer",
-                i + 1,
-            )
-
-        elif large_image:
-            # No useful text + large image
-            # => very likely scanned page.
-            logger.info(
-                "[OCR] Page %d appears to be scanned. "
-                "Running OCR...",
-                i + 1,
-            )
-
-            try:
-                text = ocr_page(page)
-
-                logger.info(
-                    "[OCR] Page %d: extracted %d characters",
-                    i + 1,
-                    len(text),
+                page_area = max(
+                    float(page.rect.width * page.rect.height),
+                    1.0,
                 )
 
-            except Exception as exc:
-                logger.exception(
-                    "[OCR] Failed on page %d: %s",
-                    i + 1,
-                    exc,
+                # 2. Inspect embedded image locations.
+                try:
+                    image_infos = page.get_image_info()
+                except Exception:
+                    logger.exception(
+                        "[PDF] Could not inspect images on page %d",
+                        page_number,
+                    )
+                    image_infos = []
+
+                image_regions = []
+
+                for info in image_infos:
+                    bbox = info.get("bbox")
+
+                    if not bbox:
+                        continue
+
+                    rect = fitz.Rect(bbox) & page.rect
+
+                    if rect.is_empty:
+                        continue
+
+                    coverage = (
+                        rect.width * rect.height
+                    ) / page_area
+
+                    # Very tiny images/icons usually do not contain
+                    # useful text. Adjust this threshold if needed.
+                    if coverage < 0.003:
+                        continue
+
+                    image_regions.append((rect, coverage))
+
+                large_page_image = any(
+                    coverage >= 0.50
+                    for _, coverage in image_regions
                 )
-                text = ""
 
-        else:
-            # No meaningful text and no large image.
-            #
-            # Could be:
-            # - blank page
-            # - vector-based PDF
-            # - unusual PDF structure
-            #
-            # We don't OCR automatically because that would
-            # unnecessarily slow down many normal PDFs.
-            logger.debug(
-                "[PDF] Page %d: no meaningful text/image; "
-                "skipping OCR",
-                i + 1,
-            )
+                # 3. Scanned page: use OCR over the whole page.
+                if not digital_text and large_page_image:
+                    logger.info(
+                        "[OCR] Scanned page %d; running full-page OCR",
+                        page_number,
+                    )
 
-            text = ""
+                    combined_text = run_ocr(
+                        render_region(page)
+                    )
 
-        # ---------------------------------
-        # Step 4: add page to pipeline
-        # ---------------------------------
-        if text.strip():
+                # 4. Mixed page: preserve digital text and OCR
+                # individual embedded images, not the whole page.
+                elif image_regions:
+                    for image_index, (rect, coverage) in enumerate(
+                        image_regions,
+                        start=1,
+                    ):
+                        # Do not OCR a full-page image if a digital
+                        # text layer already exists. It could duplicate
+                        # almost the entire page.
+                        if digital_text and coverage >= 0.50:
+                            continue
 
-            pages.append({
-                "text": text.strip(),
-                "page": i + 1,
-                "source": source,
-            })
+                        logger.debug(
+                            "[OCR] Page %d, image %d: OCR region",
+                            page_number,
+                            image_index,
+                        )
 
-    doc.close()
+                        image_text = run_ocr(
+                            render_region(page, rect)
+                        )
 
-    logger.info(
-        "[PDF] Completed parsing: %d pages extracted from %s",
-        len(pages),
-        source,
-    )
+                        if not image_text:
+                            continue
+
+                        # 5. Avoid appending OCR text already present
+                        # in the digital text or earlier OCR output.
+                        existing = normalize(combined_text)
+                        new_lines = []
+
+                        for line in image_text.splitlines():
+                            line = line.strip()
+
+                            if not line:
+                                continue
+
+                            normalized_line = normalize(line)
+
+                            if normalized_line not in existing:
+                                new_lines.append(line)
+                                existing += " " + normalized_line
+
+                        if new_lines:
+                            combined_text = (
+                                combined_text + "\n\n"
+                                if combined_text else ""
+                            ) + "\n".join(new_lines)
+
+                # 6. Keep the same output format used by your pipeline.
+                if combined_text.strip():
+                    pages.append({
+                        "text": combined_text.strip(),
+                        "page": page_number,
+                        "source": source,
+                    })
+
+                    logger.info(
+                        "[PDF] Page %d extracted: %d characters",
+                        page_number,
+                        len(combined_text),
+                    )
+                else:
+                    logger.warning(
+                        "[PDF] Page %d produced no text",
+                        page_number,
+                    )
+
+    except Exception:
+        logger.exception("[PDF] Failed to parse %s", path)
+        raise
 
     return pages
+
 
 def _extract_text_from_binary_ppt(path: str) -> str:
     """Fallback parser for legacy binary .ppt files (OLE2 format)."""

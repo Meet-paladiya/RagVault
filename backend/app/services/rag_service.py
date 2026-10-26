@@ -84,20 +84,39 @@ def embed_question_node(state: RAGState) -> RAGState:
     return state
 
 
+
 def retrieve_chunks_node(state: RAGState) -> RAGState:
-    """Node 2: Retrieve top-k similar chunks from the chat's ChromaDB collection within max_distance."""
-    from app.config import get_settings
-    cfg = get_settings()
-    logger.debug("[RAG] Retrieving chunks (top_k=%d, max_dist=%.2f)", state["top_k"], cfg.rag_max_distance)
+    """Retrieve top-k chunks without the distance filter for diagnosis."""
+    logger.info(
+        "[RAG] Retrieving chunks (top_k=%d, distance_filter=disabled)",
+        state["top_k"],
+    )
+
     chunks = query_collection(
         chat_id=state["chat_id"],
         query_embedding=state["query_embedding"],
         k=state["top_k"],
-        max_distance=cfg.rag_max_distance,
+        max_distance=None,
     )
+
     state["retrieved_chunks"] = chunks
-    logger.info("[RAG] Retrieved %d chunks meeting distance threshold <= %.2f", len(chunks), cfg.rag_max_distance)
+
+    logger.info(
+        "[RAG] Retrieved %d chunks",
+        len(chunks),
+    )
+
+    for chunk in chunks:
+        logger.info(
+            "[RAG] Match: source=%s page=%s distance=%.4f text=%s",
+            chunk.get("source"),
+            chunk.get("page"),
+            chunk.get("distance", -1),
+            chunk.get("text", "")[:200],
+        )
+
     return state
+
 
 
 def assemble_context_node(state: RAGState) -> RAGState:
@@ -303,8 +322,23 @@ async def stream_rag(
         chat_id=chat_id,
         query_embedding=query_embedding,
         k=cfg.top_k,
-        max_distance=cfg.rag_max_distance,
+        max_distance=None,
     )
+    logger.info(
+    "[RAG:stream] chat_id=%s retrieved_chunks=%d",
+    chat_id,
+    len(retrieved_chunks),
+    )
+
+    for chunk in retrieved_chunks:
+        logger.info(
+        "[RAG:stream] source=%s page=%s distance=%.4f text=%r",
+        chunk.get("source"),
+        chunk.get("page"),
+        chunk.get("distance", -1),
+        chunk.get("text", "")[:300],
+    )
+    
 
     # ── Guard: If no relevant chunks meet the similarity threshold ────────────
     if not retrieved_chunks:

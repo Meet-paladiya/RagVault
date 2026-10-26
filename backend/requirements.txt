@@ -25,3 +25,4 @@ numpy==1.26.4
 python-dotenv==1.0.1
 aiofiles==24.1.0
 rich==13.9.4
+paddleocr==3.7.0
