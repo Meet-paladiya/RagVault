@@ -203,21 +203,26 @@ def _normalise_compact_questions(questions: list[dict[str, Any]], prefix: str) -
 
 
 async def _invoke_llm_async(prompt: str) -> str:
-    """Send prompt to local OpenAI-compatible / llama.cpp LLM server."""
+    """Send prompt to local OpenAI-compatible / llama.cpp LLM server.
+
+    Acquires the global generation semaphore so quiz generation never
+    races with an active chat stream on a single-threaded CPU LLM.
+    """
     cfg = get_settings()
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(
-            f"{cfg.llm_base_url}/chat/completions",
-            json={
-                "model": cfg.llm_model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2,
-                "stream": False,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
+    async with ollama_generation_gate:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(
+                f"{cfg.llm_base_url}/chat/completions",
+                json={
+                    "model": cfg.llm_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2,
+                    "stream": False,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
 
 
 async def _fetch_question_batch(prompt: str, prefix: str) -> list[dict[str, Any]]:
@@ -264,7 +269,7 @@ async def generate_quiz(
     context = "\n\n".join(
         f"[Source: {c['source']}, Page: {c['page']}]\n{c['text']}" for c in chunks
     )
-    
+
     # ── Dispatch parallel batch requests to LLM ──────────────────────────────
     prompt_mcq = _build_batch_prompt(topic, context, count=10, focus_angle="core")
     prompt_blank = _build_batch_prompt(topic, context, count=10, focus_angle="applied")
@@ -390,3 +395,4 @@ async def submit_quiz(
             else "Keep studying — review the paragraph explanations below for your incorrect answers."
         ),
     }
+    
