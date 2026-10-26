@@ -5,8 +5,9 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, AsyncGenerator, Callable, Coroutine
 from uuid import UUID, uuid4
+from datetime import datetime
 
 import httpx
 from fastapi import HTTPException, status
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import get_settings
+from app.database import AsyncSessionLocal
 from app.models.quiz import Quiz
 from app.utils.chroma_client import query_collection
 from app.utils.embedder import embed_single
@@ -239,6 +241,190 @@ async def _fetch_question_batch(prompt: str, prefix: str) -> list[dict[str, Any]
         except Exception as exc:
             logger.warning("[QUIZ] Batch '%s' attempt %d failed: %s", prefix, attempt, exc)
     return []
+
+
+def _calculate_batch_sizes(total: int, initial_batch_size: int = 3) -> list[int]:
+    """Calculate balanced batch sizes starting with a fast initial batch (e.g., 3 questions)."""
+    if total <= initial_batch_size:
+        return [max(1, total)]
+    sizes = [initial_batch_size]
+    remaining = total - initial_batch_size
+    while remaining > 0:
+        if remaining <= 6:
+            sizes.append(remaining)
+            break
+        elif remaining == 7:
+            sizes.extend([3, 4])
+            break
+        elif remaining == 8:
+            sizes.extend([4, 4])
+            break
+        elif remaining <= 12:
+            half = remaining // 2
+            sizes.append(half)
+            sizes.append(remaining - half)
+            break
+        else:
+            take = 6 if remaining % 5 != 0 else 5
+            sizes.append(take)
+            remaining -= take
+    return sizes
+
+
+def _get_batch_context(chunks: list[dict[str, Any]], batch_idx: int, total_batches: int) -> str:
+    """Slice retrieved chunks across batches so each batch tests diverse document areas."""
+    if len(chunks) <= 3 or total_batches <= 1:
+        selected = chunks
+    else:
+        chunk_count = len(chunks)
+        window_size = max(2, (chunk_count // total_batches) + 2)
+        start_idx = (batch_idx * (chunk_count - window_size)) // max(1, total_batches - 1) if total_batches > 1 else 0
+        start_idx = max(0, min(start_idx, chunk_count - window_size))
+        selected = chunks[start_idx : start_idx + window_size]
+        if not selected:
+            selected = chunks
+    return "\n\n".join(
+        f"[Source: {c['source']}, Page: {c['page']}]\n{c['text']}" for c in selected
+    )
+
+
+async def generate_quiz_stream(
+    chat_id: str,
+    topic: str,
+    num_questions: int = 20,
+    initial_batch_size: int = 3,
+    check_disconnected: Callable[[], Coroutine[Any, Any, bool]] | None = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Progressively generate a quiz in batches and yield Server-Sent Events (SSE).
+
+    1. Immediately emits 'init' with quiz metadata.
+    2. Generates initial small batch (e.g. 2-3 MCQs) in ~3s and emits 'batch'.
+    3. Concurrently commits questions to PostgreSQL so the quiz is always in a persistent state.
+    4. Generates remaining batches in background, updating DB and emitting 'batch' events.
+    5. Emits 'done' when all questions are generated or loop finishes.
+    """
+    quiz_id = uuid4()
+    cid = UUID(chat_id)
+
+    # 1. Retrieve relevant chunks
+    if topic == "General Summary":
+        from app.utils.chroma_client import get_all_chunks
+        chunks = _representative_chunks(get_all_chunks(chat_id=chat_id, limit=2000), limit=12)
+    else:
+        topic_embedding = embed_single(topic)
+        chunks = query_collection(chat_id=chat_id, query_embedding=topic_embedding, k=8)
+
+    if not chunks:
+        err_msg = "No documents found in this knowledge space. Please upload documents first."
+        yield f"data: {json.dumps({'type': 'error', 'detail': err_msg})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+
+    # 2. Emit initial metadata event
+    yield f"data: {json.dumps({'type': 'init', 'quiz_id': str(quiz_id), 'chat_id': chat_id, 'topic': topic, 'target_total': num_questions, 'created_at': datetime.utcnow().isoformat()})}\n\n"
+
+    batch_sizes = _calculate_batch_sizes(num_questions, initial_batch_size=initial_batch_size)
+    total_batches = len(batch_sizes)
+    all_questions: list[dict[str, Any]] = []
+    angles = ["core", "applied", "detailed", "synthesis"]
+
+    for batch_idx, batch_count in enumerate(batch_sizes):
+        # Graceful cancellation if client disconnected
+        if check_disconnected:
+            try:
+                if await check_disconnected():
+                    logger.info("[QUIZ STREAM] Client disconnected. Aborting generation at batch %d.", batch_idx + 1)
+                    break
+            except Exception:
+                pass
+
+        focus_angle = angles[batch_idx % len(angles)]
+        context = _get_batch_context(chunks, batch_idx, total_batches)
+
+        # Exclude recent questions from earlier batches to prevent repetition
+        excluded = [q.get("question", "") for q in all_questions[-10:] if q.get("question")]
+        prompt = _build_batch_prompt(
+            topic=topic,
+            context=context,
+            count=batch_count,
+            excluded_questions=excluded,
+            focus_angle=focus_angle,
+        )
+
+        batch_prefix = f"b{batch_idx + 1}"
+        new_questions = await _fetch_question_batch(prompt, batch_prefix)
+
+        # Fallback retry if needed for the initial fast batch
+        if not new_questions and batch_idx == 0:
+            fallback_prompt = _build_batch_prompt(topic=topic, context=context, count=batch_count, focus_angle="core")
+            new_questions = await _fetch_question_batch(fallback_prompt, "b1_fb")
+
+        if new_questions:
+            # Assign sequential continuous IDs: q_1, q_2, ...
+            for i, q in enumerate(new_questions):
+                q["id"] = f"q_{len(all_questions) + i + 1}"
+            all_questions.extend(new_questions)
+
+            # Persist incrementally to database using fresh session
+            try:
+                async with AsyncSessionLocal() as session:
+                    if batch_idx == 0 or len(all_questions) == len(new_questions):
+                        quiz = Quiz(
+                            id=quiz_id,
+                            chat_id=cid,
+                            topic=topic,
+                            total_questions=len(all_questions),
+                            questions=all_questions,
+                            score=None,
+                            weak_topics=None,
+                            created_at=datetime.utcnow(),
+                        )
+                        session.add(quiz)
+                    else:
+                        db_res = await session.execute(select(Quiz).where(Quiz.id == quiz_id))
+                        quiz = db_res.scalar_one_or_none()
+                        if quiz:
+                            quiz.questions = list(all_questions)
+                            quiz.total_questions = len(all_questions)
+                            flag_modified(quiz, "questions")
+                    await session.commit()
+            except Exception as db_exc:
+                logger.error("[QUIZ STREAM] Failed saving batch %d to DB: %s", batch_idx + 1, db_exc)
+
+            # Emit batch event
+            is_last_batch = (batch_idx == total_batches - 1) or (len(all_questions) >= num_questions)
+            batch_payload = {
+                "type": "batch",
+                "quiz_id": str(quiz_id),
+                "batch_index": batch_idx + 1,
+                "new_questions": new_questions,
+                "total_loaded": len(all_questions),
+                "target_total": num_questions,
+                "is_complete": is_last_batch,
+            }
+            yield f"data: {json.dumps(batch_payload)}\n\n"
+
+            if len(all_questions) >= num_questions:
+                break
+        else:
+            logger.warning("[QUIZ STREAM] Batch %d produced 0 questions.", batch_idx + 1)
+
+    if not all_questions:
+        err_msg = "Failed to generate valid quiz questions from local LLM. Please try again."
+        yield f"data: {json.dumps({'type': 'error', 'detail': err_msg})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+
+    # 3. Emit done event
+    done_payload = {
+        "type": "done",
+        "quiz_id": str(quiz_id),
+        "total_questions": len(all_questions),
+        "is_complete": True,
+    }
+    yield f"data: {json.dumps(done_payload)}\n\n"
+    yield "data: [DONE]\n\n"
 
 
 # ─── Parallel Quiz Generation ────────────────────────────────────────────────

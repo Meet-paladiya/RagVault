@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronRight, XCircle, CheckCircle2, BookOpen, RotateCcw, Sparkles } from 'lucide-react'
+import { ChevronRight, XCircle, CheckCircle2, BookOpen, RotateCcw, Sparkles, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -10,27 +10,43 @@ interface QuizCardProps {
   quiz: Quiz
   onSubmit: (answers: Record<string, string>) => void
   isSubmitting?: boolean
+  isLoadingMore?: boolean
+  targetTotal?: number
 }
 
-export function QuizCard({ quiz, onSubmit, isSubmitting }: QuizCardProps) {
+export function QuizCard({ quiz, onSubmit, isSubmitting, isLoadingMore = false, targetTotal }: QuizCardProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
 
-  const question: MCQQuestion = quiz.questions[currentIndex]
-  const progress = ((currentIndex + 1) / quiz.questions.length) * 100
-  const isLast = currentIndex === quiz.questions.length - 1
-  const hasAnswered = !!answers[question.id]
+  const totalTarget = targetTotal || quiz.total_questions || quiz.questions.length || 20
+  const question: MCQQuestion | undefined = quiz.questions[currentIndex]
+  const isLoadedLast = currentIndex >= quiz.questions.length - 1
+  const isTrueLast = isLoadedLast && !isLoadingMore && quiz.questions.length >= totalTarget
+  const isWaitingForMore = isLoadedLast && isLoadingMore && quiz.questions.length < totalTarget
+  const progress = Math.min(100, ((currentIndex + 1) / totalTarget) * 100)
+  const hasAnswered = question ? !!answers[question.id] : false
 
   const handleSelect = (optionId: string) => {
+    if (!question) return
     setAnswers((prev) => ({ ...prev, [question.id]: optionId }))
   }
 
   const handleNext = () => {
-    if (isLast) {
+    if (isTrueLast) {
       onSubmit(answers)
-    } else {
+    } else if (!isLoadedLast) {
       setCurrentIndex((i) => i + 1)
     }
+  }
+
+  if (!question) {
+    return (
+      <div className="glass-card rounded-xl p-8 text-center space-y-3">
+        <Loader2 className="w-6 h-6 animate-spin mx-auto text-purple-400" />
+        <p className="text-xs font-medium text-foreground">Preparing first batch of questions…</p>
+        <p className="text-[11px] text-muted-foreground">The first 2–3 questions will appear in a few seconds.</p>
+      </div>
+    )
   }
 
   return (
@@ -41,11 +57,23 @@ export function QuizCard({ quiz, onSubmit, isSubmitting }: QuizCardProps) {
       exit={{ opacity: 0, x: -20 }}
       className="space-y-4"
     >
-      {/* Progress */}
+      {/* Progress & Live Generation Badge */}
       <div>
-        <div className="flex justify-between text-[11px] text-muted-foreground mb-1.5">
-          <span>Question {currentIndex + 1} of {quiz.questions.length}</span>
-          <span>{quiz.topic}</span>
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
+          <span className="font-semibold text-foreground">
+            Question {currentIndex + 1} of {totalTarget}
+          </span>
+          {isLoadingMore ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-purple-300 bg-purple-500/15 border border-purple-500/25 px-2 py-0.5 rounded-full animate-pulse font-medium">
+              <Loader2 className="w-2.5 h-2.5 animate-spin text-purple-400" />
+              <span>Generating in background ({quiz.questions.length}/{totalTarget} ready)</span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium">
+              <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+              <span>All {quiz.questions.length} questions ready</span>
+            </span>
+          )}
         </div>
         <Progress value={progress} className="h-1.5" />
       </div>
@@ -77,16 +105,41 @@ export function QuizCard({ quiz, onSubmit, isSubmitting }: QuizCardProps) {
         })}
       </div>
 
-      {/* Next / Submit */}
-      <Button
-        onClick={handleNext}
-        disabled={!hasAnswered || isSubmitting}
-        className="w-full btn-gradient text-white border-0"
-        size="sm"
-      >
-        {isLast ? (isSubmitting ? 'Submitting…' : 'Submit Quiz') : 'Next'}
-        <ChevronRight className="w-4 h-4 ml-1" />
-      </Button>
+      {/* Next / Waiting / Submit */}
+      {isWaitingForMore ? (
+        <div className="space-y-2 pt-1">
+          <Button
+            disabled
+            className="w-full bg-white/5 text-muted-foreground border border-white/10 h-9 text-xs"
+            size="sm"
+          >
+            <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5 text-purple-400" />
+            Preparing next questions… ({quiz.questions.length}/{totalTarget} loaded)
+          </Button>
+          {hasAnswered && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => onSubmit(answers)}
+                disabled={isSubmitting}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+              >
+                Or submit quiz now ({quiz.questions.length} questions completed)
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Button
+          onClick={handleNext}
+          disabled={!hasAnswered || isSubmitting}
+          className="w-full btn-gradient text-white border-0"
+          size="sm"
+        >
+          {isTrueLast ? (isSubmitting ? 'Submitting…' : 'Submit Quiz') : 'Next'}
+          <ChevronRight className="w-4 h-4 ml-1" />
+        </Button>
+      )}
     </motion.div>
   )
 }
