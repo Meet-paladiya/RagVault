@@ -37,10 +37,39 @@ export const useGenerateNotes = (chatId: string) => {
 
 export const downloadNotesPdf = async (chatId: string): Promise<void> => {
   const res = await api.get(`/chats/${chatId}/notes/pdf`, { responseType: 'blob' })
+  const disposition = (res.headers['content-disposition'] || '') as string
+  const contentType = (res.headers['content-type'] || '') as string
+
+  let filename = `ragvault-notes-${chatId}.pdf`
+  const match = disposition.match(/filename=["']?([^"';]+)["']?/)
+  if (match && match[1]) {
+    filename = match[1]
+  } else if (contentType.includes('zip') || contentType.includes('octet-stream')) {
+    filename = `ragvault-notes-${chatId}.zip`
+  }
+
   const url = URL.createObjectURL(res.data)
   const link = document.createElement('a')
   link.href = url
-  link.download = `ragvault-notes-${chatId}.pdf`
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+export const downloadNotesZip = async (chatId: string): Promise<void> => {
+  const res = await api.get(`/chats/${chatId}/notes/zip`, { responseType: 'blob' })
+  const disposition = (res.headers['content-disposition'] || '') as string
+  let filename = `ragvault-notes-${chatId}.zip`
+  const match = disposition.match(/filename=["']?([^"';]+)["']?/)
+  if (match && match[1]) {
+    filename = match[1]
+  }
+  const url = URL.createObjectURL(res.data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
   document.body.appendChild(link)
   link.click()
   link.remove()

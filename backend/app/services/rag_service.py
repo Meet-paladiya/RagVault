@@ -167,7 +167,7 @@ def generate_answer_node(state: RAGState) -> RAGState:
                 json={
                     "model": cfg.llm_model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.0,
+                    "temperature": 0.1,
                     "stream": False,
                 },
             )
