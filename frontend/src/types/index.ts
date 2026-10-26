@@ -80,6 +80,43 @@ export interface Quiz {
   created_at: string;
 }
 
+export interface QuizStreamInitEvent {
+  type: 'init';
+  quiz_id: string;
+  chat_id: string;
+  topic: string;
+  target_total: number;
+  created_at: string;
+}
+
+export interface QuizStreamBatchEvent {
+  type: 'batch';
+  quiz_id: string;
+  batch_index: number;
+  new_questions: MCQQuestion[];
+  total_loaded: number;
+  target_total: number;
+  is_complete: boolean;
+}
+
+export interface QuizStreamDoneEvent {
+  type: 'done';
+  quiz_id: string;
+  total_questions: number;
+  is_complete: boolean;
+}
+
+export interface QuizStreamErrorEvent {
+  type: 'error';
+  detail: string;
+}
+
+export type QuizStreamEvent =
+  | QuizStreamInitEvent
+  | QuizStreamBatchEvent
+  | QuizStreamDoneEvent
+  | QuizStreamErrorEvent;
+
 export interface WrongQuestionDetail {
   question_id: string;
   question: string;

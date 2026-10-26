@@ -8,7 +8,7 @@ import {
 import { useMessages, streamMessage } from '@/api/messages'
 import { useChat, useClearKnowledge, useUpdateChat, useDeleteChat } from '@/api/chats'
 import { useDocuments } from '@/api/documents'
-import { useGenerateQuiz, useSubmitQuiz } from '@/api/quiz'
+import { useSubmitQuiz, streamQuizGeneration } from '@/api/quiz'
 import { downloadNotesPdf, useNotes, useGenerateNotes, downloadRemedialNotesPdf, useRemedialNotes, useGenerateRemedialNotes } from '@/api/notes'
 import { DocumentList } from '@/components/documents/DocumentList'
 import { DropZone } from '@/components/documents/DropZone'
@@ -107,7 +107,6 @@ export function ChatDetailPage() {
   const generateRemedialNotes = useGenerateRemedialNotes(chatId!)
 
   const clearKnowledge = useClearKnowledge()
-  const generateQuiz = useGenerateQuiz(chatId!)
   const submitQuiz = useSubmitQuiz()
   const updateChat = useUpdateChat()
   const deleteChat = useDeleteChat()
@@ -123,10 +122,19 @@ export function ChatDetailPage() {
   const [selectedQuizType, setSelectedQuizType] = useState<'auto' | 'topic' | null>(null)
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null)
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null)
+  const [isQuizStreaming, setIsQuizStreaming] = useState(false)
+  const [quizTargetTotal, setQuizTargetTotal] = useState(20)
+  const quizAbortRef = useRef<AbortController | null>(null)
   const [isDownloadingNotesPdf, setIsDownloadingNotesPdf] = useState(false)
   const [isDownloadingRemedialPdf, setIsDownloadingRemedialPdf] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [headerTitle, setHeaderTitle] = useState('')
+
+  useEffect(() => {
+    return () => {
+      quizAbortRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     if (chatData?.title) {
@@ -310,20 +318,107 @@ export function ChatDetailPage() {
 
   const handleGenerateQuiz = async (type: 'auto' | 'topic', topicOverride?: string) => {
     if (!chatId) return
+    quizAbortRef.current?.abort()
+    const controller = new AbortController()
+    quizAbortRef.current = controller
+
     setSelectedQuizType(type)
+    setIsQuizStreaming(true)
+    setQuizResult(null)
+    setActiveQuiz(null)
+
     const topic = type === 'auto' ? 'General Summary' : (topicOverride || 'General Summary')
+    const targetTotal = 20
+    setQuizTargetTotal(targetTotal)
+
     try {
-      const quiz = await generateQuiz.mutateAsync({ topic, num_questions: 20 })
-      setActiveQuiz(quiz)
-      setQuizResult(null)
+      await streamQuizGeneration(
+        chatId,
+        { topic, num_questions: targetTotal, initial_batch_size: 3 },
+        {
+          onInit: (initData) => {
+            setActiveQuiz({
+              id: initData.quiz_id,
+              chat_id: initData.chat_id,
+              topic: initData.topic,
+              total_questions: initData.target_total,
+              questions: [],
+              created_at: initData.created_at,
+            })
+          },
+          onBatch: (batchData) => {
+            setActiveQuiz((prev) => {
+              if (!prev) {
+                return {
+                  id: batchData.quiz_id,
+                  chat_id: chatId,
+                  topic,
+                  total_questions: batchData.target_total,
+                  questions: batchData.new_questions,
+                  created_at: new Date().toISOString(),
+                }
+              }
+              return {
+                ...prev,
+                questions: [...prev.questions, ...batchData.new_questions],
+                total_questions: batchData.is_complete
+                  ? prev.questions.length + batchData.new_questions.length
+                  : batchData.target_total,
+              }
+            })
+            if (batchData.is_complete) {
+              setIsQuizStreaming(false)
+            }
+          },
+          onDone: (doneData) => {
+            setIsQuizStreaming(false)
+            setActiveQuiz((prev) => {
+              if (!prev) return prev
+              return {
+                ...prev,
+                total_questions: doneData.total_questions,
+              }
+            })
+          },
+          onError: (err) => {
+            setIsQuizStreaming(false)
+            setActiveQuiz((prev) => {
+              if (prev && prev.questions.length > 0) {
+                toast({
+                  title: 'Partial Quiz Ready',
+                  description: `Generated ${prev.questions.length} questions. You can take the quiz now.`,
+                })
+                return prev
+              }
+              toast({
+                title: 'Quiz unavailable',
+                description: err.message || 'Make sure a ready PDF is uploaded in this chat.',
+                variant: 'destructive',
+              })
+              setSelectedQuizType(null)
+              return null
+            })
+          },
+        },
+        controller.signal
+      )
     } catch (error) {
+      setIsQuizStreaming(false)
       toast({
         title: 'Quiz unavailable',
-        description: getApiErrorMessage(error, 'Make sure a ready PDF is uploaded in this chat.'),
+        description: getApiErrorMessage(error, 'Failed to connect to quiz service.'),
         variant: 'destructive',
       })
       setSelectedQuizType(null)
     }
+  }
+
+  const handleExitQuiz = () => {
+    quizAbortRef.current?.abort()
+    setIsQuizStreaming(false)
+    setActiveQuiz(null)
+    setQuizResult(null)
+    setSelectedQuizType(null)
   }
 
   const handleSubmitQuiz = async (answers: Record<string, string>) => {
@@ -688,12 +783,12 @@ export function ChatDetailPage() {
                           Generate a 20-question multiple-choice quiz.
                         </p>
                       </div>
-                      {selectedQuizType && !generateQuiz.isPending && (
+                      {selectedQuizType && !isQuizStreaming && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground"
-                          onClick={() => setSelectedQuizType(null)}
+                          onClick={handleExitQuiz}
                         >
                           Reset
                         </Button>
@@ -708,15 +803,15 @@ export function ChatDetailPage() {
                           <h5 className="text-xs font-semibold">Auto Quiz (All Docs)</h5>
                         </div>
                         <p className="text-[10px] text-muted-foreground leading-relaxed">
-                          Builds a general 20-question MCQ quiz covering all documents.
+                          Builds a 20-question MCQ quiz covering all documents with fast progressive loading.
                         </p>
                         <Button
                           onClick={() => handleGenerateQuiz('auto', 'General Summary')}
-                          disabled={generateQuiz.isPending}
+                          disabled={isQuizStreaming}
                           className="w-full btn-gradient text-white border-0 h-8 text-[11px] rounded-lg mt-1 quiz-generate-btn"
                         >
-                          {generateQuiz.isPending && selectedQuizType === 'auto'
-                            ? 'Generating 20 Questions…'
+                          {isQuizStreaming && selectedQuizType === 'auto'
+                            ? 'Preparing First Questions…'
                             : 'Generate Auto Quiz'}
                         </Button>
                       </div>
@@ -730,36 +825,36 @@ export function ChatDetailPage() {
                           <h5 className="text-xs font-semibold">Topic Quiz</h5>
                         </div>
                         <p className="text-[10px] text-muted-foreground leading-relaxed">
-                          Focuses specifically on a chosen subject or chapter with 20 MCQs.
+                          Focuses specifically on a chosen subject or chapter with fast progressive loading.
                         </p>
                         <div className="space-y-2 mt-1">
                           <Input
                             value={quizTopic}
                             onChange={(e) => setQuizTopic(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleGenerateQuiz('topic', quizTopic)}
+                            onKeyDown={(e) => e.key === 'Enter' && !isQuizStreaming && handleGenerateQuiz('topic', quizTopic)}
                             placeholder="e.g. Neural networks"
-                            disabled={generateQuiz.isPending}
+                            disabled={isQuizStreaming}
                             className="h-8 text-xs bg-white/5 border-white/10 focus-visible:ring-1 focus-visible:ring-purple-500/50 quiz-topic-input"
                           />
                           <Button
                             onClick={() => handleGenerateQuiz('topic', quizTopic)}
-                            disabled={!quizTopic.trim() || generateQuiz.isPending}
+                            disabled={!quizTopic.trim() || isQuizStreaming}
                             className="w-full btn-gradient text-white border-0 h-8 text-[11px] rounded-lg quiz-generate-btn"
                           >
-                            {generateQuiz.isPending && selectedQuizType === 'topic'
-                              ? 'Generating 20 Questions…'
+                            {isQuizStreaming && selectedQuizType === 'topic'
+                              ? 'Preparing First Questions…'
                               : 'Generate Topic Quiz'}
                           </Button>
                         </div>
                       </div>
                     )}
 
-                    {selectedQuizType && generateQuiz.isPending && (
+                    {selectedQuizType && isQuizStreaming && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="text-xs text-muted-foreground hover:text-foreground border border-white/10"
-                        onClick={() => setSelectedQuizType(null)}
+                        onClick={handleExitQuiz}
                       >
                         Cancel / Show All Options
                       </Button>
@@ -769,7 +864,7 @@ export function ChatDetailPage() {
                   <QuizResults
                     result={quizResult}
                     onRecommendations={() => { }}
-                    onRetry={() => { setActiveQuiz(null); setQuizResult(null); setSelectedQuizType(null) }}
+                    onRetry={handleExitQuiz}
                     onGenerateRemedialNotes={handleOpenRemedialNotes}
                     isGeneratingRemedial={generateRemedialNotes.isPending}
                   />
@@ -779,7 +874,7 @@ export function ChatDetailPage() {
                       variant="ghost"
                       size="sm"
                       className="text-[11px] h-7 text-muted-foreground hover:text-foreground px-2"
-                      onClick={() => { setActiveQuiz(null); setQuizResult(null); setSelectedQuizType(null) }}
+                      onClick={handleExitQuiz}
                     >
                       ← Exit Quiz
                     </Button>
@@ -787,6 +882,8 @@ export function ChatDetailPage() {
                       quiz={activeQuiz}
                       onSubmit={handleSubmitQuiz}
                       isSubmitting={submitQuiz.isPending}
+                      isLoadingMore={isQuizStreaming}
+                      targetTotal={quizTargetTotal}
                     />
                   </div>
                 )

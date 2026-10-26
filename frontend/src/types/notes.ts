@@ -5,6 +5,9 @@ export interface NoteCard {
   key_points: string[]
   source?: string
   page?: number
+  page_end?: number
+  chapter?: string
+  is_new_chapter?: boolean
   tag: 'Concept' | 'Definition' | 'Formula' | 'Takeaway' | 'Summary' | string
 }
 

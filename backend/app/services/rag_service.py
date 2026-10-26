@@ -189,8 +189,8 @@ def generate_answer_node(state: RAGState) -> RAGState:
                 f"{cfg.llm_base_url}/chat/completions",
                 json={
                     "model": cfg.llm_model,
-                    "messages": messages,
-                    "temperature": 0.0,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
                     "stream": False,
                 },
             )

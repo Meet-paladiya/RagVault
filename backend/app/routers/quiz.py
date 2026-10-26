@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +21,7 @@ from app.schemas.quiz import (
     QuizSubmitRequest,
     RecommendationResponse,
 )
-from app.services.quiz_service import generate_quiz, submit_quiz
+from app.services.quiz_service import generate_quiz, generate_quiz_stream, submit_quiz
 from app.services.document_readiness import ensure_documents_ready
 from app.services.recommendation_service import get_recommendations
 
@@ -41,6 +42,40 @@ async def _verify_chat_ownership(chat_id: str, user: User, db: AsyncSession) -> 
     if str(chat.user_id) != str(user.id):
         raise HTTPException(status_code=403, detail="Access denied.")
     return chat
+
+
+@router.post("/chats/{chat_id}/quiz/stream")
+async def create_quiz_stream(
+    chat_id: str,
+    payload: QuizGenerateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Progressively generate a quiz via Server-Sent Events (SSE).
+
+    Delivers an initial batch of 2-3 MCQs immediately so users don't wait,
+    followed by the remaining questions streamed in background batches.
+    """
+    await _verify_chat_ownership(chat_id, current_user, db)
+    await ensure_documents_ready(chat_id, db)
+
+    return StreamingResponse(
+        generate_quiz_stream(
+            chat_id=chat_id,
+            topic=payload.topic,
+            num_questions=payload.num_questions,
+            initial_batch_size=payload.initial_batch_size,
+            check_disconnected=request.is_disconnected,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/chats/{chat_id}/quiz", response_model=QuizResponse, status_code=201)

@@ -17,6 +17,30 @@ class MCQQuestion(BaseModel):
 class QuizGenerateRequest(BaseModel):
     topic: str
     num_questions: int = 5
+    initial_batch_size: int = 3
+
+class QuizStreamInitEvent(BaseModel):
+    type: str = "init"
+    quiz_id: UUID
+    chat_id: UUID
+    topic: str
+    target_total: int
+    created_at: datetime
+
+class QuizStreamBatchEvent(BaseModel):
+    type: str = "batch"
+    quiz_id: UUID
+    batch_index: int
+    new_questions: List[MCQQuestion]
+    total_loaded: int
+    target_total: int
+    is_complete: bool
+
+class QuizStreamDoneEvent(BaseModel):
+    type: str = "done"
+    quiz_id: UUID
+    total_questions: int
+    is_complete: bool = True
 
 class QuizResponse(BaseModel):
     id: UUID
