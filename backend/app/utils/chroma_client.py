@@ -156,7 +156,21 @@ def query_collection(
             candidates.append(item)
 
     if not candidates:
-        logger.info("No chunks met max_distance threshold (%.2f) for chat %s", max_distance or 0.0, chat_id)
+        logger.info("No chunks met max_distance threshold (%.2f) for chat %s. Falling back to closest available chunks.", max_distance or 0.0, chat_id)
+        # Soft fallback: include chunks up to 0.75 so terse slide bullets and conversational queries are not dropped
+        for doc_text, meta, dist in zip(docs, metas, dists):
+            dist_val = float(dist)
+            if dist_val <= 0.75:
+                candidates.append({
+                    "text": doc_text,
+                    "source": meta.get("source", "unknown"),
+                    "page": meta.get("page", 0),
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "document_id": meta.get("document_id", ""),
+                    "distance": dist_val,
+                })
+
+    if not candidates:
         return []
 
     # Prefer relevant chunks from different uploaded documents before filling

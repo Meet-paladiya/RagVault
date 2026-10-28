@@ -59,6 +59,12 @@ def _sync_ingest_pipeline(
     total_pages = len(pages)
     logger.info("[INGEST] Extracted %d pages from %s", total_pages, filename)
 
+    if total_pages == 0:
+        raise ValueError(
+            f"No readable content or transcript could be extracted from '{filename}'. "
+            f"Please check that the file is not empty or corrupted."
+        )
+
     chunks = chunk_pages(pages, chunk_size=chunk_size, overlap=chunk_overlap)
     total_chunks = len(chunks)
     logger.info("[INGEST] Created %d chunks from %s", total_chunks, filename)

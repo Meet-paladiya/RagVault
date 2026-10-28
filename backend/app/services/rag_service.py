@@ -86,17 +86,21 @@ def embed_question_node(state: RAGState) -> RAGState:
 
 
 def retrieve_chunks_node(state: RAGState) -> RAGState:
-    """Retrieve top-k chunks without the distance filter for diagnosis."""
+    """Retrieve top-k chunks with distance filtering for optimal accuracy."""
+    from app.config import get_settings
+    cfg = get_settings()
+
     logger.info(
-        "[RAG] Retrieving chunks (top_k=%d, distance_filter=disabled)",
+        "[RAG] Retrieving chunks (top_k=%d, max_distance=%.2f)",
         state["top_k"],
+        cfg.rag_max_distance,
     )
 
     chunks = query_collection(
         chat_id=state["chat_id"],
         query_embedding=state["query_embedding"],
         k=state["top_k"],
-        max_distance=None,
+        max_distance=cfg.rag_max_distance,
     )
 
     state["retrieved_chunks"] = chunks
@@ -140,12 +144,12 @@ def _build_messages(state: RAGState) -> list[dict[str, str]]:
 
     system_content = (
         "You are RagVault, a strict document-grounded AI knowledge assistant.\n\n"
-        "MANDATORY RESTRICTIONS:\n"
-        "1. Answer questions ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts from the user's uploaded documents.\n"
-        "2. ABSOLUTELY NEVER use outside knowledge, pre-trained knowledge, physics/science/math/trivia knowledge, or assumptions.\n"
-        "3. If the provided CONTEXT does NOT explicitly contain the answer to the user's question, you MUST reply EXACTLY with:\n"
+        "MANDATORY INSTRUCTIONS:\n"
+        "1. Answer questions accurately and directly based on the facts provided in the CONTEXT excerpts from the user's uploaded documents. You may summarize, synthesize, and explain points present in the context.\n"
+        "2. ABSOLUTELY NEVER hallucinate or use outside knowledge, pre-trained trivia, or unstated assumptions not supported by the context.\n"
+        "3. If the provided CONTEXT completely lacks relevant information to address the question, reply with:\n"
         f'"{NOT_FOUND_MESSAGE}"\n'
-        "4. Never answer from general knowledge. If the topic is absent from the provided context excerpts, refuse immediately with the exact refusal sentence above.\n"
+        "4. Never answer from general knowledge if the topic is absent from the provided context excerpts.\n"
         "5. Reference facts using inline citations like [Source: <filename>, Page: <page>]."
     )
 
@@ -189,7 +193,7 @@ def generate_answer_node(state: RAGState) -> RAGState:
                 f"{cfg.llm_base_url}/chat/completions",
                 json={
                     "model": cfg.llm_model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": messages,
                     "temperature": 0.1,
                     "stream": False,
                 },
@@ -322,7 +326,7 @@ async def stream_rag(
         chat_id=chat_id,
         query_embedding=query_embedding,
         k=cfg.top_k,
-        max_distance=None,
+        max_distance=cfg.rag_max_distance,
     )
     logger.info(
     "[RAG:stream] chat_id=%s retrieved_chunks=%d",
@@ -364,12 +368,12 @@ async def stream_rag(
 
     system_content = (
         "You are RagVault, a strict document-grounded AI knowledge assistant.\n\n"
-        "MANDATORY RESTRICTIONS:\n"
-        "1. Answer questions ONLY and EXCLUSIVELY based on the facts directly stated in the CONTEXT excerpts from the user's uploaded documents.\n"
-        "2. ABSOLUTELY NEVER use outside knowledge, pre-trained knowledge, physics/science/math/trivia knowledge, or assumptions.\n"
-        "3. If the provided CONTEXT does NOT explicitly contain the answer to the user's question, you MUST reply EXACTLY with:\n"
+        "MANDATORY INSTRUCTIONS:\n"
+        "1. Answer questions accurately and directly based on the facts provided in the CONTEXT excerpts from the user's uploaded documents. You may summarize, synthesize, and explain points present in the context.\n"
+        "2. ABSOLUTELY NEVER hallucinate or use outside knowledge, pre-trained trivia, or unstated assumptions not supported by the context.\n"
+        "3. If the provided CONTEXT completely lacks relevant information to address the question, reply with:\n"
         f'"{NOT_FOUND_MESSAGE}"\n'
-        "4. Never answer from general knowledge. If the topic is absent from the provided context excerpts, refuse immediately with the exact refusal sentence above.\n"
+        "4. Never answer from general knowledge if the topic is absent from the provided context excerpts.\n"
         "5. Reference facts using inline citations like [Source: <filename>, Page: <page>]."
     )
 

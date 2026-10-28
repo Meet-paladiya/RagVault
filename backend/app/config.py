@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     # ── RAG / Chunking ────────────────────────────────────────────────────────
     chunk_size: int = 600
     chunk_overlap: int = 100
-    top_k: int = 5
-    rag_max_distance: float = 0.38
+    top_k: int = 7
+    rag_max_distance: float = 0.55
 
     # ── Faster-Whisper ────────────────────────────────────────────────────────
     whisper_model: str = "base"

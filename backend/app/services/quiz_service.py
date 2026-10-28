@@ -25,12 +25,56 @@ from app.services.llm_gate import ollama_generation_gate
 logger = logging.getLogger(__name__)
 
 
+_ADMIN_SYLLABUS_PATTERNS = [
+    r"\bco\s*[-–—:]?\s*[0-9]\b",
+    r"\bpo\s*[-–—:]?\s*[0-9]\b",
+    r"\bcourse\s+outcomes?\b",
+    r"\bcourse\s+objectives?\b",
+    r"\bprogram\s+outcomes?\b",
+    r"\bcourse\s+code\b",
+    r"\bevaluation\s+scheme\b",
+    r"\bmarking\s+scheme\b",
+    r"\bteaching\s+scheme\b",
+    r"\bcredits?\s*:\s*[0-9]\b",
+    r"\bprerequisites?\s*:",
+    r"\btext\s*books?\s*:",
+    r"\breference\s*books?\s*:",
+    r"\blecture\s+hours?\b",
+]
+
+_SYLLABUS_META_QUESTION_REGEX = re.compile(
+    r"\b(co\s*[-–—:]?\s*[0-9]|po\s*[-–—:]?\s*[0-9]|course\s+outcome|course\s+objective|"
+    r"program\s+outcome|which\s+(unit|module|chapter|syllabus|course)|"
+    r"course\s+code|credit\s+hour|marking\s+scheme|evaluation\s+scheme|"
+    r"prescribed\s+textbook|reference\s+book)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_syllabus_admin_chunk(text: str) -> bool:
+    """Detect if a chunk is purely administrative/syllabus metadata rather than actual educational content."""
+    lower = text.lower()
+    matches = sum(1 for p in _ADMIN_SYLLABUS_PATTERNS if re.search(p, lower))
+    if matches >= 2 or re.search(r"\bcourse\s+outcomes?\b.*\bco\s*[-–—:]?\s*[0-9]\b", lower, re.DOTALL):
+        return True
+    return False
+
+
+def _filter_educational_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Prioritize substantive content chunks over administrative syllabus front-matter."""
+    content_chunks = [c for c in chunks if not _is_syllabus_admin_chunk(c.get("text", ""))]
+    if content_chunks:
+        return content_chunks
+    return chunks
+
+
 def _representative_chunks(chunks: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
-    """Spread general quizzes across the full uploaded collection."""
-    if len(chunks) <= limit:
-        return chunks
-    step = (len(chunks) - 1) / (limit - 1)
-    return [chunks[round(index * step)] for index in range(limit)]
+    """Spread general quizzes across the full uploaded collection, avoiding syllabus front-matter."""
+    substantive = _filter_educational_chunks(chunks)
+    if len(substantive) <= limit:
+        return substantive
+    step = (len(substantive) - 1) / (limit - 1)
+    return [substantive[round(index * step)] for index in range(limit)]
 
 
 # ─── Ultra-Compact Schema for High-Speed Generation ─────────────────────────
@@ -83,10 +127,14 @@ def _build_batch_prompt(
 
 Rules:
 - {focus}
+- CRITICAL: Every question must test ACTUAL academic/subject-matter concepts, definitions, formulas, theories, algorithms, mechanisms, or practical applications.
+- STRICTLY FORBIDDEN: NEVER generate questions about syllabus structure, course administration, or course outcome codes. Do NOT ask "What is CO-1/CO-2/PO-1?", "What does Course Outcome X focus on?", "Which unit/module covers X?", or questions about course codes, credits, prerequisites, grading schemes, evaluation criteria, or textbook/author names.
+- If the text is a syllabus or outline listing topics (e.g. "CO-1: Convolutional Neural Networks, Pooling"), ask conceptual questions testing knowledge of the concept itself (e.g. "What is the primary function of max pooling in CNNs?"), NEVER ask about the syllabus description or outcome label.
 - Generate MCQs only. Do not generate fill-in-the-blank questions.
 - Every question must test a different fact, concept, formula, or application.
 - Questions must be unique in meaning, not just different in wording.{exclusion_block}
 - 4 concise options per question (1-5 words each), exactly 1 correct answer (indicated by 0-based integer 'answer' index: 0, 1, 2, or 3).
+- Options must NEVER be outcome codes or unit names (e.g. no options like "CO-1", "CO-2", "Unit 1", "Unit 2").
 - Provide a 1-sentence concise explanation (max 15 words) explaining why the correct answer is true.
 - Output ONLY valid JSON array — no markdown fences, no extra text.
 - Use this exact schema:
@@ -162,6 +210,16 @@ def _normalise_compact_questions(questions: list[dict[str, Any]], prefix: str) -
             q_text = str(q.get("question", "")).strip()
             options_raw = q.get("options", [])
             if not q_text or not isinstance(options_raw, list) or len(options_raw) < 4:
+                continue
+
+            # Drop syllabus administrative/meta-questions (e.g. "What is the primary focus of CO-1?")
+            if _SYLLABUS_META_QUESTION_REGEX.search(q_text):
+                logger.info("[QUIZ] Dropped syllabus meta-question: %r", q_text)
+                continue
+
+            # Drop questions where options are syllabus outcomes/units
+            if any(_SYLLABUS_META_QUESTION_REGEX.search(str(opt)) for opt in options_raw):
+                logger.info("[QUIZ] Dropped question with syllabus meta-options: %r", q_text)
                 continue
 
             ans_raw = q.get("answer", 0)
@@ -313,7 +371,8 @@ async def generate_quiz_stream(
         chunks = _representative_chunks(get_all_chunks(chat_id=chat_id, limit=2000), limit=12)
     else:
         topic_embedding = embed_single(topic)
-        chunks = query_collection(chat_id=chat_id, query_embedding=topic_embedding, k=8)
+        raw_chunks = query_collection(chat_id=chat_id, query_embedding=topic_embedding, k=16)
+        chunks = _filter_educational_chunks(raw_chunks)[:8]
 
     if not chunks:
         err_msg = "No documents found in this knowledge space. Please upload documents first."
@@ -444,7 +503,8 @@ async def generate_quiz(
         chunks = _representative_chunks(get_all_chunks(chat_id=chat_id, limit=2000), limit=10)
     else:
         topic_embedding = embed_single(topic)
-        chunks = query_collection(chat_id=chat_id, query_embedding=topic_embedding, k=6)
+        raw_chunks = query_collection(chat_id=chat_id, query_embedding=topic_embedding, k=14)
+        chunks = _filter_educational_chunks(raw_chunks)[:6]
 
     if not chunks:
         raise HTTPException(

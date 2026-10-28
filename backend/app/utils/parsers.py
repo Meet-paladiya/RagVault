@@ -1,18 +1,24 @@
 from typing import List, Dict, Any
 import logging
 import os
+import re
 import threading
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {
-    ".pdf", ".pptx", ".ppt",
-    ".mp4", ".mkv", ".mov", ".avi", ".webm",
-    ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"
-}
-
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
+TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".csv", ".json"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
+
+SUPPORTED_EXTENSIONS = (
+    {".pdf", ".pptx", ".ppt"}
+    | AUDIO_EXTENSIONS
+    | VIDEO_EXTENSIONS
+    | TEXT_EXTENSIONS
+    | IMAGE_EXTENSIONS
+    | {".docx", ".doc"}
+)
 
 def parse_file(path: str) -> List[Dict[str, Any]]:
     """Dispatch to the right parser based on extension."""
@@ -21,16 +27,16 @@ def parse_file(path: str) -> List[Dict[str, Any]]:
         return parse_pdf(path)
     elif ext in {".pptx", ".ppt"}:
         return parse_pptx(path)
+    elif ext in AUDIO_EXTENSIONS:
+        return parse_audio(path)
+    elif ext in VIDEO_EXTENSIONS:
+        return parse_video(path)
     elif ext in TEXT_EXTENSIONS:
         return parse_text(path)
     elif ext in {".docx", ".doc"}:
         return parse_docx(path)
     elif ext in IMAGE_EXTENSIONS:
         return parse_image(path)
-    elif ext in AUDIO_EXTENSIONS:
-        return parse_audio(path)
-    elif ext in VIDEO_EXTENSIONS:
-        return parse_video(path)
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
 
@@ -92,6 +98,19 @@ def parse_docx(path: str) -> List[Dict[str, Any]]:
                 full_text = " ".join(text_elements)
         except Exception as exc:
             logger.error(f"Failed to parse docx {path}: {exc}")
+
+    # Fallback for legacy binary .doc files (OLE2 format)
+    if not full_text.strip() and path.lower().endswith(".doc"):
+        try:
+            with open(path, "rb") as f:
+                content = f.read()
+            u_chunks = re.findall(b'(?:[\x20-\x7e]\x00){4,}', content)
+            utf16_text = [m.decode('utf-16le', errors='ignore').strip() for m in u_chunks]
+            a_chunks = re.findall(b'[\x20-\x7e]{4,}', content)
+            ascii_text = [m.decode('ascii', errors='ignore').strip() for m in a_chunks if not any(k in m.decode('ascii', errors='ignore') for k in ['WordDocument', 'Current User', 'CompObj'])]
+            full_text = " ".join([t for t in utf16_text + ascii_text if len(t) > 4])
+        except Exception as doc_err:
+            logger.warning(f"Legacy .doc extraction notice for {path}: {doc_err}")
 
     if not full_text.strip():
         return []
@@ -244,10 +263,10 @@ def parse_pdf(path: str) -> List[Dict[str, Any]]:
                     for _, coverage in image_regions
                 )
 
-                # 3. Scanned page: use OCR over the whole page.
-                if not digital_text and large_page_image:
+                # 3. Scanned page: use OCR over the whole page whenever digital text is absent.
+                if not digital_text:
                     logger.info(
-                        "[OCR] Scanned page %d; running full-page OCR",
+                        "[OCR] Scanned page %d (no digital text); running full-page OCR",
                         page_number,
                     )
 
@@ -366,12 +385,19 @@ def _extract_text_from_binary_ppt(path: str) -> str:
         try:
             with open(path, "rb") as f:
                 content = f.read()
-            import re
             utf16_matches = re.findall(b'(?:[\x20-\x7e]\x00){4,}', content)
             for m in utf16_matches:
                 try:
                     decoded = m.decode('utf-16le', errors='ignore').strip()
                     if len(decoded) > 3:
+                        text_chunks.append(decoded)
+                except Exception:
+                    pass
+            ascii_matches = re.findall(b'[\x20-\x7e]{4,}', content)
+            for m in ascii_matches:
+                try:
+                    decoded = m.decode('ascii', errors='ignore').strip()
+                    if len(decoded) > 3 and not any(k in decoded for k in ['PowerPoint', 'Current User', 'Document Summary']):
                         text_chunks.append(decoded)
                 except Exception:
                     pass
@@ -389,32 +415,81 @@ def _extract_text_from_binary_ppt(path: str) -> str:
     return "\n".join(unique_chunks)
 
 
+def _extract_text_from_pptx_shape(shape) -> List[str]:
+    """Recursively extract readable text from any PowerPoint shape (text frames, tables, groups)."""
+    texts: List[str] = []
+    try:
+        # 1. Text frame (titles, text boxes, autoshapes, placeholders)
+        if getattr(shape, "has_text_frame", False) and shape.text_frame:
+            for paragraph in shape.text_frame.paragraphs:
+                p_text = "".join(run.text for run in paragraph.runs).strip() or paragraph.text.strip()
+                if p_text:
+                    texts.append(p_text)
+
+        # 2. Tables
+        elif getattr(shape, "has_table", False) and shape.table:
+            for row in shape.table.rows:
+                row_vals = [cell.text.strip() for cell in row.cells if cell.text and cell.text.strip()]
+                if row_vals:
+                    texts.append(" | ".join(row_vals))
+
+        # 3. Group shapes (nested shapes inside a group)
+        elif getattr(shape, "shapes", None) is not None:
+            for sub_shape in shape.shapes:
+                texts.extend(_extract_text_from_pptx_shape(sub_shape))
+
+        # 4. Fallback for any other shape having a .text attribute
+        elif hasattr(shape, "text") and shape.text:
+            t = shape.text.strip()
+            if t:
+                texts.append(t)
+    except Exception as e:
+        logger.debug(f"Error extracting PPTX shape text: {e}")
+
+    return texts
+
+
 def parse_pptx(path: str) -> List[Dict[str, Any]]:
     """python-pptx slide-by-slide text extraction with legacy binary .ppt fallback."""
-    from pptx import Presentation
+    try:
+        from pptx import Presentation
+    except ImportError:
+        logger.warning("python-pptx library is not installed in current Python environment. Attempting legacy fallback.")
+        Presentation = None
+
     logger.info(f"Parsing PPT/PPTX: {path}")
     source = os.path.basename(path)
 
     # Strategy 1: OpenXML (.pptx) via python-pptx
-    try:
-        prs = Presentation(path)
-        pages = []
-        for i, slide in enumerate(prs.slides):
-            text = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text"):
-                    text.append(shape.text)
-            slide_text = "\n".join(text).strip()
-            if slide_text:
-                pages.append({
-                    "text": slide_text,
-                    "page": i + 1,
-                    "source": source
-                })
-        if pages:
-            return pages
-    except Exception as exc:
-        logger.warning(f"python-pptx could not parse {path} as OpenXML: {exc}. Attempting legacy .ppt fallback...")
+    if Presentation is not None:
+        try:
+            prs = Presentation(path)
+            pages = []
+            for i, slide in enumerate(prs.slides):
+                text: List[str] = []
+                for shape in slide.shapes:
+                    text.extend(_extract_text_from_pptx_shape(shape))
+
+                # Also extract slide presenter notes if available
+                try:
+                    if getattr(slide, "has_notes_slide", False) and slide.notes_slide:
+                        notes_frame = getattr(slide.notes_slide, "notes_text_frame", None)
+                        if notes_frame and notes_frame.text and notes_frame.text.strip():
+                            text.append(f"Notes: {notes_frame.text.strip()}")
+                except Exception:
+                    pass
+
+                slide_text = "\n".join(text).strip()
+                if slide_text:
+                    pages.append({
+                        "text": slide_text,
+                        "page": i + 1,
+                        "source": source
+                    })
+            if pages:
+                return pages
+        except Exception as exc:
+            logger.warning(f"python-pptx could not parse {path} as OpenXML: {exc}. Attempting legacy .ppt fallback...")
 
     # Strategy 2: Legacy binary .ppt format fallback
     full_text = _extract_text_from_binary_ppt(path)
@@ -450,7 +525,25 @@ def _get_whisper_model():
         from app.config import get_settings
         settings = get_settings()
 
-        logger.info(f"[WHISPER] Loading Whisper model ('{settings.whisper_model}') on {settings.whisper_device}...")
+        # Check local offline model candidates first
+        local_candidates = [
+            os.path.join(os.environ.get("MODEL_DIR", "/models"), f"whisper-{settings.whisper_model}"),
+            os.path.join(os.environ.get("MODEL_DIR", "/models"), "whisper"),
+            os.path.join(settings.hf_home, "whisper", f"whisper-{settings.whisper_model}"),
+            os.path.join(settings.hf_home, "whisper"),
+        ]
+        model_target = settings.whisper_model
+        for cand in local_candidates:
+            if os.path.exists(cand) and os.path.exists(os.path.join(cand, "model.bin")):
+                logger.info(f"[WHISPER] Found local offline Whisper model at: {cand}")
+                model_target = cand
+                break
+
+        whisper_dir = os.path.join(settings.hf_home, "whisper") if hasattr(settings, "hf_home") else None
+        if whisper_dir:
+            os.makedirs(whisper_dir, exist_ok=True)
+
+        logger.info(f"[WHISPER] Loading Whisper model ('{model_target}') on {settings.whisper_device}...")
 
         # Temporarily override HF_HUB_OFFLINE so initial model download succeeds on first run
         old_offline = os.environ.pop("HF_HUB_OFFLINE", None)
@@ -458,13 +551,22 @@ def _get_whisper_model():
         model = None
         try:
             for comp_type in ["int8", "default", "float32"]:
-                try:
-                    logger.info(f"[WHISPER] Attempting load with compute_type='{comp_type}'...")
-                    model = WhisperModel(settings.whisper_model, device=settings.whisper_device, compute_type=comp_type)
-                    logger.info(f"[WHISPER] Successfully loaded Whisper model with compute_type='{comp_type}'")
+                for dl_root in ([whisper_dir, None] if whisper_dir else [None]):
+                    try:
+                        logger.info(f"[WHISPER] Attempting load with compute_type='{comp_type}', download_root={dl_root}...")
+                        model = WhisperModel(
+                            model_target,
+                            device=settings.whisper_device,
+                            compute_type=comp_type,
+                            download_root=dl_root,
+                            cpu_threads=4,
+                        )
+                        logger.info(f"[WHISPER] Successfully loaded Whisper model with compute_type='{comp_type}'")
+                        break
+                    except Exception as exc:
+                        logger.warning(f"[WHISPER] Failed with compute_type='{comp_type}', download_root={dl_root}: {exc}")
+                if model is not None:
                     break
-                except Exception as exc:
-                    logger.warning(f"[WHISPER] Failed with compute_type='{comp_type}': {exc}")
         finally:
             if old_offline is not None:
                 os.environ["HF_HUB_OFFLINE"] = old_offline
@@ -484,6 +586,10 @@ def _extract_audio_to_wav(media_path: str) -> tuple[str, bool]:
     import subprocess
     import tempfile
 
+    # If it is already a WAV file, use it directly
+    if media_path.lower().endswith(".wav"):
+        return media_path, False
+
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         wav_path = tmp.name
 
@@ -500,40 +606,18 @@ def _extract_audio_to_wav(media_path: str) -> tuple[str, bool]:
     except Exception as ffmpeg_err:
         logger.warning(f"[AUDIO] ffmpeg CLI execution failed for {media_path}: {ffmpeg_err}")
 
-    # Strategy 2: PyAV fallback (pure Python bindings)
-    if not extracted:
-        try:
-            import av
-            container = av.open(media_path)
-            audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
-            if audio_stream:
-                output_container = av.open(wav_path, 'w', format='wav')
-                out_stream = output_container.add_stream('pcm_s16le', rate=16000)
-                out_stream.channels = 1
-
-                resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
-                for frame in container.decode(audio_stream):
-                    for resampled_frame in resampler.resample(frame):
-                        for packet in out_stream.encode(resampled_frame):
-                            output_container.mux(packet)
-                for packet in out_stream.encode(None):
-                    output_container.mux(packet)
-                output_container.close()
-                container.close()
-                if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
-                    extracted = True
-        except Exception as av_err:
-            logger.warning(f"[AUDIO] PyAV audio extraction failed for {media_path}: {av_err}")
-
     if extracted:
         return wav_path, True
-    else:
-        if os.path.exists(wav_path):
-            try:
-                os.unlink(wav_path)
-            except Exception:
-                pass
-        return media_path, False
+
+    # Clean up empty temp file if ffmpeg failed
+    if os.path.exists(wav_path):
+        try:
+            os.unlink(wav_path)
+        except Exception:
+            pass
+
+    # Strategy 2: Faster-Whisper natively decodes audio/video files via its built-in PyAV reader
+    return media_path, False
 
 
 def _transcribe_with_whisper(audio_path: str, source: str) -> List[Dict[str, Any]]:
@@ -542,12 +626,17 @@ def _transcribe_with_whisper(audio_path: str, source: str) -> List[Dict[str, Any
     try:
         model = _get_whisper_model()
         
+        # beam_size=1 provides 3x-5x faster CPU transcription with virtually identical accuracy
         try:
-            segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=True)
+            segments, info = model.transcribe(audio_path, beam_size=1, vad_filter=True)
             segment_list = list(segments)
+            if not segment_list:
+                logger.info(f"[WHISPER] vad_filter=True produced 0 segments for {source}; retrying with vad_filter=False...")
+                segments, info = model.transcribe(audio_path, beam_size=1, vad_filter=False)
+                segment_list = list(segments)
         except Exception as vad_err:
             logger.warning(f"[WHISPER] Transcribe with vad_filter=True failed for {source} ({vad_err}); retrying with vad_filter=False...")
-            segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=False)
+            segments, info = model.transcribe(audio_path, beam_size=1, vad_filter=False)
             segment_list = list(segments)
 
         pages = []
@@ -585,7 +674,7 @@ def _transcribe_with_whisper(audio_path: str, source: str) -> List[Dict[str, Any
         return pages
     except Exception as exc:
         logger.exception(f"[WHISPER] Transcription failed for {source}: {exc}")
-        return []
+        raise RuntimeError(f"Whisper transcription failed for {source}: {exc}")
 
 
 def parse_audio(path: str) -> List[Dict[str, Any]]:
